@@ -742,11 +742,22 @@
         </div>
       </div>
       <p class="section-desc" style="margin-top:0;">TikTok และ Bird (NONL+NOFF) เป็น 0 ทั้งคู่ — รวมถึง SKU ที่ยังไม่มีประวัติพอคำนวณ Priority ด้วย ระบุวันที่คาดว่าจะเติมสต็อกได้ที่นี่เพื่อแจ้งทีม (บันทึกไว้ใน Export Focus List &amp; Restock ETA หรือ Export CSV)</p>
+
+      <div class="note-box" style="margin-bottom:14px;">
+        <b>+ เพิ่มสินค้าที่หมดสต็อกเอง</b>
+        <p class="section-desc" style="margin:6px 0 10px;">เผื่อระบบยังตรวจไม่เจอ (เช่น ข้อมูลยังไม่อัปเดต) — พิมพ์หรือเลือก Product Code เพื่อดึงทุกไซส์/สีของสินค้านั้นมาแสดง ติ๊กเฉพาะไซส์/สีที่หมดจริง แล้วใส่วันที่คาดว่าจะเติมสต็อกครั้งเดียวให้ทุกแถวที่ติ๊กไว้</p>
+        <div class="filter-bar" style="margin-bottom:0;">
+          <input type="text" id="manualAddProductCode" list="productCodeDatalist" placeholder="พิมพ์หรือเลือก Product Code...">
+          <datalist id="productCodeDatalist"></datalist>
+        </div>
+        <div id="manualAddVariants"></div>
+      </div>
+
       <div class="table-scroll" style="max-height:60vh; overflow-y:auto;">
         <table>
           <thead>
             <tr>
-              <th>Product Code</th><th>Product Name</th><th>SKU</th><th>Priority</th>
+              <th></th><th>Product Code</th><th>Product Name</th><th>SKU</th><th>Priority</th>
               <th>วันที่คาดว่าจะเติมสต็อก</th><th>สถานะการสั่ง</th>
             </tr>
           </thead>
@@ -833,6 +844,7 @@
   let focusedSkus = new Set();    // SKUs the user has starred to watch — survives Reset, exportable/importable as JSON
   let restockEta = new Map();     // sku -> 'YYYY-MM-DD' expected restock date, for SKUs out of stock everywhere — survives Reset like focusedSkus, same Export/Import JSON
   let restockStatus = new Map();  // sku -> RESTOCK_STATUS_META key — manual follow-up status, same lifetime/export as restockEta
+  let manualStockedOut = new Set(); // SKUs a user added to the "out of stock everywhere" list by hand (system hasn't caught up to real-world zero stock yet) — same lifetime/export as restockEta
 
   let isAnalyzing = false;
   let sortKey = '', sortDir = 'desc';
@@ -1747,7 +1759,10 @@
     const restockEtaObj = {}, restockStatusObj = {};
     restockEta.forEach(function(dateStr, sku){ restockEtaObj[sku] = dateStr; });
     restockStatus.forEach(function(statusKey, sku){ restockStatusObj[sku] = statusKey; });
-    const payload = { focusedSkus: Array.from(focusedSkus), restockEta: restockEtaObj, restockStatus: restockStatusObj };
+    const payload = {
+      focusedSkus: Array.from(focusedSkus), restockEta: restockEtaObj, restockStatus: restockStatusObj,
+      manualStockedOut: Array.from(manualStockedOut),
+    };
     const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1769,6 +1784,8 @@
     Object.keys(statusObj).forEach(function(sku){
       if (RESTOCK_STATUS_META[statusObj[sku]]) restockStatus.set(sku, statusObj[sku]);
     });
+    const manualArr = (payload && !Array.isArray(payload) && Array.isArray(payload.manualStockedOut)) ? payload.manualStockedOut : [];
+    manualArr.forEach(function(sku){ if (typeof sku==='string' && sku) manualStockedOut.add(sku); });
     return added;
   }
 
@@ -1793,7 +1810,7 @@
   // meant a row jumped to a different position the instant you filled in its date, which made
   // it look like the input hadn't registered. Stable order keeps the row you just edited in place.
   function getStockedOutRows(){
-    return rows.filter(function(r){ return r.tiktokStock===0 && r.birdTotal===0; })
+    return rows.filter(function(r){ return (r.tiktokStock===0 && r.birdTotal===0) || manualStockedOut.has(r.sku); })
       .sort(function(a,b){ return (a.productCode||'').localeCompare(b.productCode||''); });
   }
   function restockEtaStatus(sku){
@@ -1853,13 +1870,18 @@
     document.getElementById('stockedOutModalSub').textContent = fmtInt(list.length) + ' SKU';
     document.getElementById('stockedOutModalTbody').innerHTML = list.length ? list.map(function(r){
       const pm = PRIORITY_META[r.priority] || {label:r.priority, cls:'muted'};
-      return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
+      // Only manually-added rows get a remove control — an auto-detected row (TikTok=0 &
+      // Bird=0) would just reappear on the next render anyway, so removing it isn't offered.
+      const removeCell = manualStockedOut.has(r.sku) ?
+        '<button type="button" class="btn-link" data-remove-manual="'+escapeHtml(r.sku)+'" title="เอาออกจากรายการที่เพิ่มเอง (เพิ่มเองไม่ได้มาจากระบบตรวจจับอัตโนมัติ)" style="padding:2px;">✕</button>' : '';
+      return '<tr><td class="focus-cell">'+removeCell+'</td>'+
+        '<td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
         '<td class="strong truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
         '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
         '<td><span class="badge '+pm.cls+'">'+pm.label+'</span></td>'+
         '<td><input type="date" class="restock-eta-input" data-sku="'+escapeHtml(r.sku)+'" value="'+escapeHtml(restockEta.get(r.sku)||'')+'" title="'+escapeHtml(restockEtaStatus(r.sku).label)+'"></td>'+
         '<td>'+restockStatusSelectHtml(r.sku)+'</td></tr>';
-    }).join('') : '<tr><td colspan="6" class="focus-empty">ไม่มีรายการตอนนี้ 🎉</td></tr>';
+    }).join('') : '<tr><td colspan="7" class="focus-empty">ไม่มีรายการตอนนี้ 🎉</td></tr>';
     const tbody = document.getElementById('stockedOutModalTbody');
     Array.from(tbody.querySelectorAll('.link-cell')).forEach(function(td){
       td.addEventListener('click', function(){ closeStockedOutModal(); openProductModal(td.getAttribute('data-sku')); });
@@ -1879,8 +1901,79 @@
         if (select.value === RESTOCK_STATUS_DEFAULT) restockStatus.delete(sku); else restockStatus.set(sku, select.value);
       });
     });
+    Array.from(tbody.querySelectorAll('[data-remove-manual]')).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        manualStockedOut.delete(btn.getAttribute('data-remove-manual'));
+        renderStockedOutModalBody();
+        renderCriticalActionPanels();
+      });
+    });
   }
-  function openStockedOutModal(){ renderStockedOutModalBody(); document.getElementById('stockedOutModalBackdrop').classList.add('open'); }
+
+  /* ---------------------- MANUAL "ADD OUT OF STOCK" PICKER ---------------------- */
+  // Lets a user assert a SKU is out of stock even when TikTok/Bird data hasn't caught up to
+  // that reality yet (e.g. a store clerk knows a size just sold out). Search is by Product
+  // Code across ALL analyzed rows (not just the auto-detected 227) so this can flag anything.
+  function populateProductCodeDatalist(){
+    const codes = Array.from(new Set(rows.map(function(r){ return r.productCode; }).filter(Boolean))).sort();
+    document.getElementById('productCodeDatalist').innerHTML = codes.map(function(c){ return '<option value="'+escapeHtml(c)+'">'; }).join('');
+  }
+  function renderManualAddVariants(productCode){
+    const el = document.getElementById('manualAddVariants');
+    if (!productCode){ el.innerHTML = ''; return; }
+    const variants = rows.filter(function(r){ return r.productCode===productCode; });
+    // Silent-clear (no "not found" message) while the user is still mid-typing — the
+    // <datalist> dropdown already gives them live feedback on which codes are valid.
+    if (!variants.length){ el.innerHTML = ''; return; }
+    el.innerHTML =
+      '<div class="table-scroll" style="max-height:220px; overflow-y:auto; margin-top:10px;">' +
+      '<table><thead><tr>' +
+      '<th style="width:30px;"><input type="checkbox" id="manualAddSelectAll" checked></th>' +
+      '<th>SKU</th><th>Color</th><th>Size</th><th class="num">TikTok</th><th class="num">Bird</th>' +
+      '</tr></thead><tbody>' +
+      variants.map(function(v){
+        return '<tr><td class="focus-cell"><input type="checkbox" class="manual-add-variant-check" data-sku="'+escapeHtml(v.sku)+'" checked></td>'+
+          '<td class="mono">'+escapeHtml(displaySku(v))+'</td>'+
+          '<td>'+escapeHtml(v.color||'—')+'</td><td>'+escapeHtml(v.size||'—')+'</td>'+
+          '<td class="num">'+fmtInt(v.tiktokStock)+'</td>'+
+          '<td class="num">'+(v.birdStatus==='OK'?fmtInt(v.birdStock):birdBadge(v.birdStatus, birdExtraLabel(v)))+'</td></tr>';
+      }).join('') +
+      '</tbody></table></div>' +
+      '<div class="filter-bar" style="margin-top:10px; margin-bottom:0;">' +
+      '<input type="date" id="manualAddDate">' +
+      '<button class="btn btn-primary btn-sm" id="manualAddApplyBtn" type="button">✔ ทำเครื่องหมายว่าหมดสต็อก + บันทึกวันที่</button>' +
+      '<div class="spacer"></div></div>';
+    document.getElementById('manualAddSelectAll').addEventListener('change', function(){
+      const on = this.checked;
+      Array.from(el.querySelectorAll('.manual-add-variant-check')).forEach(function(cb){ cb.checked = on; });
+    });
+    document.getElementById('manualAddApplyBtn').addEventListener('click', function(){
+      const dateVal = document.getElementById('manualAddDate').value;
+      const checked = Array.from(el.querySelectorAll('.manual-add-variant-check:checked'));
+      if (!checked.length){ setStatus('เลือกอย่างน้อย 1 ไซส์/สี ก่อนบันทึก', 'err'); return; }
+      checked.forEach(function(cb){
+        const sku = cb.getAttribute('data-sku');
+        manualStockedOut.add(sku);
+        if (dateVal) restockEta.set(sku, dateVal); else restockEta.delete(sku);
+      });
+      document.getElementById('manualAddProductCode').value = '';
+      el.innerHTML = '';
+      renderStockedOutModalBody();
+      renderCriticalActionPanels();
+      setStatus('เพิ่ม ' + fmtInt(checked.length) + ' SKU เข้ารายการหมดสต็อกแล้ว', 'ok');
+    });
+  }
+  document.getElementById('manualAddProductCode').addEventListener('input', function(){
+    renderManualAddVariants(this.value.trim());
+  });
+
+  function openStockedOutModal(){
+    populateProductCodeDatalist();
+    document.getElementById('manualAddProductCode').value = '';
+    document.getElementById('manualAddVariants').innerHTML = '';
+    renderStockedOutModalBody();
+    document.getElementById('stockedOutModalBackdrop').classList.add('open');
+  }
   function closeStockedOutModal(){ document.getElementById('stockedOutModalBackdrop').classList.remove('open'); }
   function exportStockedOutCsv(){
     const cols = ['Product Code','Product Name','SKU','Priority','Restock ETA','ETA Countdown','Order Status'];
@@ -2443,7 +2536,7 @@
       '<p><b>Sales at Risk:</b> = Suggested Qty × ราคาขาย (Current Selling Price จาก Bird ถ้าไม่มีจะใช้ Original Price แทน) — คือโอกาสเสียยอดขายเป็นบาทถ้าไม่เติมสต็อก SKU นั้น SKU ที่ไม่มีราคาขายในไฟล์ Bird เลยจะไม่ถูกนับรวม (ไม่ใช่ 0) และจะถูกตั้งเป็น "Missing Price Data" ใน Data Quality แทน</p>',
       '<p><b>Family:</b> อ้างอิงจากข้อมูลจริงใน Bird Product Master (Brand Family) เท่านั้น หากไม่พบจะแสดง "UNMAPPED"</p>',
       '<p><b>Size-level Risk:</b> สินค้าที่มีบาง Size อยู่ระดับ Critical/Urgent (P0/P1) ขณะที่บาง Size ยังปกติ (P3/P4) จะขึ้นป้าย "⚠ Size Risk" ที่ตาราง Full Inventory และหน้ารายละเอียดสินค้า — สต็อกรวมของสินค้าที่ดูปกติ อาจซ่อน Size ที่ขายดีแต่ของหมดอยู่ก็ได้</p>',
-      '<p><b>Focus Watchlist / Restock ETA / สถานะการสั่ง:</b> คลิก ⭐ ที่ SKU ที่คุณติดตามเป็นพิเศษ ระบบจะแจ้งเตือนในการ์ด Focus Watchlist ทันทีที่คุณอัปโหลดไฟล์และวิเคราะห์ใหม่ ส่วนวันที่คาดว่าจะเติมสต็อกและสถานะการสั่ง (รอดำเนินการ/สั่งแล้ว/ยืนยันแล้ว/ได้รับแล้ว) ที่กรอกไว้ในปุ่ม "สินค้าหมดสต็อกทุกช่องทาง" ก็เก็บไว้ในลักษณะเดียวกัน เป็นสถานะที่กำหนดเอง ไม่ได้คำนวณอัตโนมัติ — แต่เนื่องจากไฟล์นี้เป็นเว็บที่รันในเบราว์เซอร์ล้วนๆ ไม่มีเซิร์ฟเวอร์เบื้องหลัง จึงส่ง Push/LINE/อีเมลแจ้งเตือนตอนที่คุณไม่ได้เปิดไฟล์อยู่ไม่ได้ — ใช้ปุ่ม Export/Import Focus List & Restock ETA (.json) เพื่อเก็บทั้งหมดไว้ใช้ครั้งถัดไป หรือส่งให้ Claude ช่วยตรวจสอบแทนตามรอบที่ตั้งไว้</p>',
+      '<p><b>Focus Watchlist / Restock ETA / สถานะการสั่ง / เพิ่มสินค้าหมดสต็อกเอง:</b> คลิก ⭐ ที่ SKU ที่คุณติดตามเป็นพิเศษ ระบบจะแจ้งเตือนในการ์ด Focus Watchlist ทันทีที่คุณอัปโหลดไฟล์และวิเคราะห์ใหม่ ส่วนวันที่คาดว่าจะเติมสต็อกและสถานะการสั่ง (รอดำเนินการ/สั่งแล้ว/ยืนยันแล้ว/ได้รับแล้ว) ที่กรอกไว้ในปุ่ม "สินค้าหมดสต็อกทุกช่องทาง" ก็เก็บไว้ในลักษณะเดียวกัน เป็นสถานะที่กำหนดเอง ไม่ได้คำนวณอัตโนมัติ — ในปุ่มนี้ยังพิมพ์/เลือก Product Code เพื่อดึงทุกไซส์/สีมาติ๊กเพิ่มเข้ารายการหมดสต็อกเองได้ด้วย เผื่อระบบยังตรวจไม่เจอจากตัวเลข TikTok/Bird อย่างเดียว — แต่เนื่องจากไฟล์นี้เป็นเว็บที่รันในเบราว์เซอร์ล้วนๆ ไม่มีเซิร์ฟเวอร์เบื้องหลัง จึงส่ง Push/LINE/อีเมลแจ้งเตือนตอนที่คุณไม่ได้เปิดไฟล์อยู่ไม่ได้ — ใช้ปุ่ม Export/Import Focus List & Restock ETA (.json) เพื่อเก็บทั้งหมดไว้ใช้ครั้งถัดไป หรือส่งให้ Claude ช่วยตรวจสอบแทนตามรอบที่ตั้งไว้</p>',
       (ttMap && ttMap.__stats && ttMap.__stats.dupSkuCount > 0 ?
         '<p><b>⚠ ข้อควรระวังคุณภาพข้อมูล:</b> พบแถวที่ SKU ผู้ขายซ้ำกันในไฟล์ TikTok ประมาณ ' + fmtInt(ttMap.__stats.dupSkuCount) + ' แถว (นับรวม Base SKU ที่ชนกันจากหลายไซส์/สี) — Snapshot History จะบันทึกตาม Seller SKU ที่แน่นอน หากมี Seller SKU ซ้ำกันเป๊ะ ระบบจะเก็บแค่ค่าล่าสุดต่อวันนั้น แนะนำให้ตรวจสอบไฟล์ต้นทางจาก TikTok Seller Center</p>' : ''),
     ].join('');
