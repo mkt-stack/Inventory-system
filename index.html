@@ -249,6 +249,10 @@
     background: var(--surface-1); border: 1px solid var(--border); color: var(--text-primary);
     border-radius: 7px; padding: 5px 8px; font-size: 12px; font-family: inherit; color-scheme: inherit;
   }
+  select.restock-status-select {
+    background: var(--surface-1); border: 1px solid var(--border); color: var(--text-primary);
+    border-radius: 7px; padding: 5px 8px; font-size: 12px; font-family: inherit;
+  }
 
   .two-col { display:grid; grid-template-columns: 1.1fr 1.4fr; gap: 16px; align-items: start; }
   @media (max-width: 980px) { .two-col { grid-template-columns: 1fr; } }
@@ -408,7 +412,10 @@
     <div class="card hero">
       <h2 class="section-title">🎯 TODAY'S REPLENISHMENT <span class="count-pill" id="todayCountPill"></span></h2>
       <p class="section-desc">รายการที่ควรพิจารณาเบิกวันนี้ เรียงตาม Priority (P0 → P4) แล้วตาม Estimated Days Left จากน้อยไปมาก</p>
-      <div id="criticalActionPanels"></div>
+      <div class="filter-bar" id="criticalActionPanels" style="margin-bottom:14px;">
+        <button class="btn" id="noffAllocBtn" type="button" style="background:var(--warning); color:#1a1200; display:none;">🚨 ของเบิกด่วน — Allocate จาก NOFF <span class="count-pill" id="noffAllocCountPill">0</span></button>
+        <button class="btn" id="stockedOutBtn" type="button" style="background:var(--critical); color:#fff; display:none;">⛔ สินค้าหมดสต็อกทุกช่องทาง <span class="count-pill" id="stockedOutCountPill">0</span></button>
+      </div>
       <div class="filter-bar">
         <input type="text" id="todaySearchBox" placeholder="ค้นหา Product Name, Product Code, SKU...">
         <select id="todayFamilyFilter"><option value="">All Families</option></select>
@@ -694,6 +701,61 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="noffModalBackdrop">
+    <div class="modal-panel" style="max-width:1100px;">
+      <div class="modal-head">
+        <div>
+          <p class="modal-title">🚨 ของเบิกด่วน — Allocate จาก NOFF</p>
+          <p class="modal-sub" id="noffModalSub"></p>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-ghost btn-sm" id="noffExportBtn" type="button">⬇ Export CSV</button>
+          <button class="modal-close" id="noffModalClose" type="button">✕</button>
+        </div>
+      </div>
+      <p class="section-desc" style="margin-top:0;">Critical (P0) ที่สต็อกออนไลน์ (NONL) ไม่พอตาม Suggested Qty แต่มีสต็อกออฟไลน์ (NOFF) เหลืออยู่ — โยกจาก NOFF เข้าออนไลน์ตามจำนวนนี้ก่อน แล้วค่อยเบิกจริง</p>
+      <div class="table-scroll" style="max-height:60vh; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Product Code</th><th>Product Name</th><th>SKU</th>
+              <th class="num">Suggested</th><th class="num">NONL (Online)</th><th class="num">NOFF (Offline)</th>
+              <th class="num">Allocate from NOFF</th>
+            </tr>
+          </thead>
+          <tbody id="noffModalTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="stockedOutModalBackdrop">
+    <div class="modal-panel" style="max-width:1100px;">
+      <div class="modal-head">
+        <div>
+          <p class="modal-title">⛔ สินค้าหมดสต็อกทุกช่องทาง</p>
+          <p class="modal-sub" id="stockedOutModalSub"></p>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-ghost btn-sm" id="stockedOutExportBtn" type="button">⬇ Export CSV</button>
+          <button class="modal-close" id="stockedOutModalClose" type="button">✕</button>
+        </div>
+      </div>
+      <p class="section-desc" style="margin-top:0;">TikTok และ Bird (NONL+NOFF) เป็น 0 ทั้งคู่ — รวมถึง SKU ที่ยังไม่มีประวัติพอคำนวณ Priority ด้วย ระบุวันที่คาดว่าจะเติมสต็อกได้ที่นี่เพื่อแจ้งทีม (บันทึกไว้ใน Export Focus List &amp; Restock ETA หรือ Export CSV)</p>
+      <div class="table-scroll" style="max-height:60vh; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Product Code</th><th>Product Name</th><th>SKU</th><th>Priority</th>
+              <th>วันที่คาดว่าจะเติมสต็อก</th><th>สถานะการสั่ง</th>
+            </tr>
+          </thead>
+          <tbody id="stockedOutModalTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="footer-note">
     ประมวลผลทั้งหมดในเบราว์เซอร์ของคุณ — ไฟล์ไม่ถูกอัปโหลดไปที่เซิร์ฟเวอร์ใดๆ · ข้อมูลจะหายไปเมื่อปิดหน้านี้ (ใช้ Export/Import Snapshot เพื่อเก็บประวัติข้ามวัน)
   </div>
@@ -770,6 +832,7 @@
   let snapshotRunLog = [];        // [{date, skuCount, totalStock}] — one entry per analyze day (same-day re-run updates in place)
   let focusedSkus = new Set();    // SKUs the user has starred to watch — survives Reset, exportable/importable as JSON
   let restockEta = new Map();     // sku -> 'YYYY-MM-DD' expected restock date, for SKUs out of stock everywhere — survives Reset like focusedSkus, same Export/Import JSON
+  let restockStatus = new Map();  // sku -> RESTOCK_STATUS_META key — manual follow-up status, same lifetime/export as restockEta
 
   let isAnalyzing = false;
   let sortKey = '', sortDir = 'desc';
@@ -1186,6 +1249,17 @@
     CANNOT_REPLENISH: { label:'Cannot Replenish', cls:'critical' },
     INSUFFICIENT_DATA: { label:'Insufficient Data', cls:'muted' },
   };
+  // Manual follow-up status for the "Out of stock everywhere" list — user-set, not derived,
+  // since restockEtaStatus() (auto ETA countdown) doesn't capture where the reorder actually
+  // stands in the process. Kept as an ordered object so the <select> renders in a sane order.
+  const RESTOCK_STATUS_DEFAULT = 'PENDING';
+  const RESTOCK_STATUS_META = {
+    PENDING:   { label:'รอดำเนินการ', cls:'muted' },
+    ORDERED:   { label:'สั่งแล้ว', cls:'info' },
+    CONFIRMED: { label:'ยืนยันแล้ว', cls:'warning' },
+    RECEIVED:  { label:'ได้รับแล้ว', cls:'good' },
+  };
+  function getRestockStatus(sku){ return restockStatus.get(sku) || RESTOCK_STATUS_DEFAULT; }
   const BIRD_STATUS_META = {
     OK: { cls:'good' }, NONL: { cls:'warning' }, NOFF: { cls:'serious' },
     NEGATIVE: { cls:'critical' }, BLANK: { cls:'muted' }, 'N/A': { cls:'muted' }, OTHER: { cls:'muted' },
@@ -1670,9 +1744,10 @@
   // Export/Import round-trip preserves everything the app can't persist on its own between
   // browser sessions. Still accepts a bare array (the old export format, focus list only).
   function exportFocusList(){
-    const restockEtaObj = {};
+    const restockEtaObj = {}, restockStatusObj = {};
     restockEta.forEach(function(dateStr, sku){ restockEtaObj[sku] = dateStr; });
-    const payload = { focusedSkus: Array.from(focusedSkus), restockEta: restockEtaObj };
+    restockStatus.forEach(function(statusKey, sku){ restockStatusObj[sku] = statusKey; });
+    const payload = { focusedSkus: Array.from(focusedSkus), restockEta: restockEtaObj, restockStatus: restockStatusObj };
     const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1689,6 +1764,10 @@
     const etaObj = (payload && !Array.isArray(payload) && payload.restockEta) || {};
     Object.keys(etaObj).forEach(function(sku){
       if (typeof etaObj[sku]==='string' && etaObj[sku]) restockEta.set(sku, etaObj[sku]);
+    });
+    const statusObj = (payload && !Array.isArray(payload) && payload.restockStatus) || {};
+    Object.keys(statusObj).forEach(function(sku){
+      if (RESTOCK_STATUS_META[statusObj[sku]]) restockStatus.set(sku, statusObj[sku]);
     });
     return added;
   }
@@ -1710,13 +1789,12 @@
       return Object.assign({}, r, { noffAllocation: Math.min(r.suggestedQty-r.birdNonl, r.birdNoff||0) });
     }).sort(function(a,b){ return b.noffAllocation - a.noffAllocation; });
   }
+  // Sorted by Product Code (stable) rather than "unset ETA first" — sorting by ETA-set-state
+  // meant a row jumped to a different position the instant you filled in its date, which made
+  // it look like the input hadn't registered. Stable order keeps the row you just edited in place.
   function getStockedOutRows(){
     return rows.filter(function(r){ return r.tiktokStock===0 && r.birdTotal===0; })
-      .sort(function(a,b){
-        const aSet = restockEta.has(a.sku) ? 1 : 0, bSet = restockEta.has(b.sku) ? 1 : 0;
-        if (aSet !== bSet) return aSet - bSet; // rows with no ETA yet float to the top
-        return (a.productCode||'').localeCompare(b.productCode||'');
-      });
+      .sort(function(a,b){ return (a.productCode||'').localeCompare(b.productCode||''); });
   }
   function restockEtaStatus(sku){
     const dateStr = restockEta.get(sku);
@@ -1727,64 +1805,103 @@
     if (diffDays === 0) return { label:'วันนี้ ('+dateStr+')', cls:'warning' };
     return { label:'อีก '+fmtInt(diffDays)+' วัน ('+dateStr+')', cls:'info' };
   }
+  // Both panels are buttons that open a modal (same pattern as the Gap List button/modal)
+  // instead of always-rendered inline tables — keeps Today's Replenishment compact, and each
+  // modal gets its own CSV export.
   function renderCriticalActionPanels(){
-    const el = document.getElementById('criticalActionPanels');
-    if (!el) return;
     const noffRows = getNoffAllocationRows();
     const stockedOutRows = getStockedOutRows();
-    if (noffRows.length===0 && stockedOutRows.length===0){ el.innerHTML=''; return; }
-
-    let html = '';
-    if (noffRows.length>0){
-      html += '<div class="note-box" style="border-color: var(--warning); margin-bottom:12px;">' +
-        '<b>🚨 ของเบิกด่วน — Allocate จาก NOFF (' + fmtInt(noffRows.length) + ' SKU)</b>' +
-        '<p class="section-desc" style="margin:6px 0 10px;">Critical (P0) ที่สต็อกออนไลน์ (NONL) ไม่พอตาม Suggested Qty แต่มีสต็อกออฟไลน์ (NOFF) เหลืออยู่ — โยกจาก NOFF เข้าออนไลน์ตามจำนวนนี้ก่อน แล้วค่อยเบิกจริง</p>' +
-        '<div class="table-scroll" style="max-height:320px; overflow-y:auto;"><table><thead><tr>' +
-        '<th>Product Code</th><th>Product Name</th><th>SKU</th>' +
-        '<th class="num">Suggested</th><th class="num">NONL (Online)</th><th class="num">NOFF (Offline)</th>' +
-        '<th class="num">Allocate from NOFF</th></tr></thead><tbody>' +
-        noffRows.map(function(r){
-          return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
-            '<td class="strong truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
-            '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
-            '<td class="num">'+fmtInt(r.suggestedQty)+'</td>'+
-            '<td class="num">'+fmtInt(r.birdNonl)+'</td>'+
-            '<td class="num">'+fmtInt(r.birdNoff)+'</td>'+
-            '<td class="num strong rec-text warning">'+fmtInt(r.noffAllocation)+'</td></tr>';
-        }).join('') +
-        '</tbody></table></div></div>';
-    }
-    if (stockedOutRows.length>0){
-      html += '<div class="note-box" style="border-color: var(--critical);">' +
-        '<b>⛔ สินค้าหมดสต็อกทุกช่องทาง (' + fmtInt(stockedOutRows.length) + ' SKU)</b>' +
-        '<p class="section-desc" style="margin:6px 0 10px;">TikTok และ Bird (NONL+NOFF) เป็น 0 ทั้งคู่ — รวมถึง SKU ที่ยังไม่มีประวัติพอคำนวณ Priority ด้วย ระบุวันที่คาดว่าจะเติมสต็อกได้ที่นี่เพื่อแจ้งทีม (บันทึกไว้ใน Export Focus List)</p>' +
-        '<div class="table-scroll" style="max-height:320px; overflow-y:auto;"><table><thead><tr>' +
-        '<th>Product Code</th><th>Product Name</th><th>SKU</th>' +
-        '<th>Priority</th><th>วันที่คาดว่าจะเติมสต็อก</th><th>สถานะ</th></tr></thead><tbody>' +
-        stockedOutRows.map(function(r){
-          const pm = PRIORITY_META[r.priority] || {label:r.priority, cls:'muted'};
-          const st = restockEtaStatus(r.sku);
-          return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
-            '<td class="strong truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
-            '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
-            '<td><span class="badge '+pm.cls+'">'+pm.label+'</span></td>'+
-            '<td><input type="date" class="restock-eta-input" data-sku="'+escapeHtml(r.sku)+'" value="'+escapeHtml(restockEta.get(r.sku)||'')+'"></td>'+
-            '<td><span class="badge '+st.cls+'">'+st.label+'</span></td></tr>';
-        }).join('') +
-        '</tbody></table></div></div>';
-    }
-    el.innerHTML = html;
-    Array.from(el.querySelectorAll('.link-cell')).forEach(function(td){
-      td.addEventListener('click', function(){ openProductModal(td.getAttribute('data-sku')); });
+    document.getElementById('noffAllocCountPill').textContent = fmtInt(noffRows.length);
+    document.getElementById('stockedOutCountPill').textContent = fmtInt(stockedOutRows.length);
+    document.getElementById('noffAllocBtn').style.display = noffRows.length>0 ? '' : 'none';
+    document.getElementById('stockedOutBtn').style.display = stockedOutRows.length>0 ? '' : 'none';
+  }
+  function renderNoffModalBody(){
+    const list = getNoffAllocationRows();
+    document.getElementById('noffModalSub').textContent = fmtInt(list.length) + ' SKU';
+    document.getElementById('noffModalTbody').innerHTML = list.length ? list.map(function(r){
+      return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
+        '<td class="strong truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
+        '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
+        '<td class="num">'+fmtInt(r.suggestedQty)+'</td>'+
+        '<td class="num">'+fmtInt(r.birdNonl)+'</td>'+
+        '<td class="num">'+fmtInt(r.birdNoff)+'</td>'+
+        '<td class="num strong rec-text warning">'+fmtInt(r.noffAllocation)+'</td></tr>';
+    }).join('') : '<tr><td colspan="7" class="focus-empty">ไม่มีรายการตอนนี้ 🎉</td></tr>';
+    Array.from(document.getElementById('noffModalTbody').querySelectorAll('.link-cell')).forEach(function(td){
+      td.addEventListener('click', function(){ closeNoffModal(); openProductModal(td.getAttribute('data-sku')); });
     });
-    Array.from(el.querySelectorAll('.restock-eta-input')).forEach(function(input){
+  }
+  function openNoffModal(){ renderNoffModalBody(); document.getElementById('noffModalBackdrop').classList.add('open'); }
+  function closeNoffModal(){ document.getElementById('noffModalBackdrop').classList.remove('open'); }
+  function exportNoffCsv(){
+    const cols = ['Product Code','Product Name','SKU','Suggested Qty','NONL (Online)','NOFF (Offline)','Allocate from NOFF'];
+    const csv = toCsv(cols, getNoffAllocationRows(), function(r){
+      return [r.productCode, cleanProductName(r.productName,r.productCode), displaySku(r), r.suggestedQty, r.birdNonl, r.birdNoff, r.noffAllocation];
+    });
+    downloadCsv(csv, 'noff_allocation.csv');
+  }
+  function restockStatusSelectHtml(sku){
+    const cur = getRestockStatus(sku);
+    const opts = Object.keys(RESTOCK_STATUS_META).map(function(k){
+      return '<option value="'+k+'"'+(k===cur?' selected':'')+'>'+RESTOCK_STATUS_META[k].label+'</option>';
+    }).join('');
+    return '<select class="restock-status-select" data-sku="'+escapeHtml(sku)+'">'+opts+'</select>';
+  }
+  function renderStockedOutModalBody(){
+    const list = getStockedOutRows();
+    document.getElementById('stockedOutModalSub').textContent = fmtInt(list.length) + ' SKU';
+    document.getElementById('stockedOutModalTbody').innerHTML = list.length ? list.map(function(r){
+      const pm = PRIORITY_META[r.priority] || {label:r.priority, cls:'muted'};
+      return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
+        '<td class="strong truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
+        '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
+        '<td><span class="badge '+pm.cls+'">'+pm.label+'</span></td>'+
+        '<td><input type="date" class="restock-eta-input" data-sku="'+escapeHtml(r.sku)+'" value="'+escapeHtml(restockEta.get(r.sku)||'')+'" title="'+escapeHtml(restockEtaStatus(r.sku).label)+'"></td>'+
+        '<td>'+restockStatusSelectHtml(r.sku)+'</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="focus-empty">ไม่มีรายการตอนนี้ 🎉</td></tr>';
+    const tbody = document.getElementById('stockedOutModalTbody');
+    Array.from(tbody.querySelectorAll('.link-cell')).forEach(function(td){
+      td.addEventListener('click', function(){ closeStockedOutModal(); openProductModal(td.getAttribute('data-sku')); });
+    });
+    // Surgical update on change (just this row's tooltip/select) instead of a full re-render —
+    // keeps the table from reflowing/losing scroll position while someone is mid-edit.
+    Array.from(tbody.querySelectorAll('.restock-eta-input')).forEach(function(input){
       input.addEventListener('change', function(){
         const sku = input.getAttribute('data-sku');
         if (input.value) restockEta.set(sku, input.value); else restockEta.delete(sku);
-        renderCriticalActionPanels();
+        input.title = restockEtaStatus(sku).label;
+      });
+    });
+    Array.from(tbody.querySelectorAll('.restock-status-select')).forEach(function(select){
+      select.addEventListener('change', function(){
+        const sku = select.getAttribute('data-sku');
+        if (select.value === RESTOCK_STATUS_DEFAULT) restockStatus.delete(sku); else restockStatus.set(sku, select.value);
       });
     });
   }
+  function openStockedOutModal(){ renderStockedOutModalBody(); document.getElementById('stockedOutModalBackdrop').classList.add('open'); }
+  function closeStockedOutModal(){ document.getElementById('stockedOutModalBackdrop').classList.remove('open'); }
+  function exportStockedOutCsv(){
+    const cols = ['Product Code','Product Name','SKU','Priority','Restock ETA','ETA Countdown','Order Status'];
+    const csv = toCsv(cols, getStockedOutRows(), function(r){
+      return [r.productCode, cleanProductName(r.productName,r.productCode), displaySku(r), r.priority,
+        restockEta.get(r.sku)||'', restockEtaStatus(r.sku).label, RESTOCK_STATUS_META[getRestockStatus(r.sku)].label];
+    });
+    downloadCsv(csv, 'stocked_out_everywhere.csv');
+  }
+  document.getElementById('noffAllocBtn').addEventListener('click', openNoffModal);
+  document.getElementById('noffModalClose').addEventListener('click', closeNoffModal);
+  document.getElementById('noffExportBtn').addEventListener('click', exportNoffCsv);
+  document.getElementById('noffModalBackdrop').addEventListener('click', function(e){
+    if (e.target === document.getElementById('noffModalBackdrop')) closeNoffModal();
+  });
+  document.getElementById('stockedOutBtn').addEventListener('click', openStockedOutModal);
+  document.getElementById('stockedOutModalClose').addEventListener('click', closeStockedOutModal);
+  document.getElementById('stockedOutExportBtn').addEventListener('click', exportStockedOutCsv);
+  document.getElementById('stockedOutModalBackdrop').addEventListener('click', function(e){
+    if (e.target === document.getElementById('stockedOutModalBackdrop')) closeStockedOutModal();
+  });
 
   /* ------------------------------ TODAY'S TABLE ------------------------------ */
   function getTodayFiltered(){
@@ -2326,7 +2443,7 @@
       '<p><b>Sales at Risk:</b> = Suggested Qty × ราคาขาย (Current Selling Price จาก Bird ถ้าไม่มีจะใช้ Original Price แทน) — คือโอกาสเสียยอดขายเป็นบาทถ้าไม่เติมสต็อก SKU นั้น SKU ที่ไม่มีราคาขายในไฟล์ Bird เลยจะไม่ถูกนับรวม (ไม่ใช่ 0) และจะถูกตั้งเป็น "Missing Price Data" ใน Data Quality แทน</p>',
       '<p><b>Family:</b> อ้างอิงจากข้อมูลจริงใน Bird Product Master (Brand Family) เท่านั้น หากไม่พบจะแสดง "UNMAPPED"</p>',
       '<p><b>Size-level Risk:</b> สินค้าที่มีบาง Size อยู่ระดับ Critical/Urgent (P0/P1) ขณะที่บาง Size ยังปกติ (P3/P4) จะขึ้นป้าย "⚠ Size Risk" ที่ตาราง Full Inventory และหน้ารายละเอียดสินค้า — สต็อกรวมของสินค้าที่ดูปกติ อาจซ่อน Size ที่ขายดีแต่ของหมดอยู่ก็ได้</p>',
-      '<p><b>Focus Watchlist / Restock ETA:</b> คลิก ⭐ ที่ SKU ที่คุณติดตามเป็นพิเศษ ระบบจะแจ้งเตือนในการ์ด Focus Watchlist ทันทีที่คุณอัปโหลดไฟล์และวิเคราะห์ใหม่ ส่วนวันที่คาดว่าจะเติมสต็อกที่กรอกไว้ในการ์ด "สินค้าหมดสต็อกทุกช่องทาง" ก็เก็บไว้ในลักษณะเดียวกัน — แต่เนื่องจากไฟล์นี้เป็นเว็บที่รันในเบราว์เซอร์ล้วนๆ ไม่มีเซิร์ฟเวอร์เบื้องหลัง จึงส่ง Push/LINE/อีเมลแจ้งเตือนตอนที่คุณไม่ได้เปิดไฟล์อยู่ไม่ได้ — ใช้ปุ่ม Export/Import Focus List & Restock ETA (.json) เพื่อเก็บทั้งสองอย่างไว้ใช้ครั้งถัดไป หรือส่งให้ Claude ช่วยตรวจสอบแทนตามรอบที่ตั้งไว้</p>',
+      '<p><b>Focus Watchlist / Restock ETA / สถานะการสั่ง:</b> คลิก ⭐ ที่ SKU ที่คุณติดตามเป็นพิเศษ ระบบจะแจ้งเตือนในการ์ด Focus Watchlist ทันทีที่คุณอัปโหลดไฟล์และวิเคราะห์ใหม่ ส่วนวันที่คาดว่าจะเติมสต็อกและสถานะการสั่ง (รอดำเนินการ/สั่งแล้ว/ยืนยันแล้ว/ได้รับแล้ว) ที่กรอกไว้ในปุ่ม "สินค้าหมดสต็อกทุกช่องทาง" ก็เก็บไว้ในลักษณะเดียวกัน เป็นสถานะที่กำหนดเอง ไม่ได้คำนวณอัตโนมัติ — แต่เนื่องจากไฟล์นี้เป็นเว็บที่รันในเบราว์เซอร์ล้วนๆ ไม่มีเซิร์ฟเวอร์เบื้องหลัง จึงส่ง Push/LINE/อีเมลแจ้งเตือนตอนที่คุณไม่ได้เปิดไฟล์อยู่ไม่ได้ — ใช้ปุ่ม Export/Import Focus List & Restock ETA (.json) เพื่อเก็บทั้งหมดไว้ใช้ครั้งถัดไป หรือส่งให้ Claude ช่วยตรวจสอบแทนตามรอบที่ตั้งไว้</p>',
       (ttMap && ttMap.__stats && ttMap.__stats.dupSkuCount > 0 ?
         '<p><b>⚠ ข้อควรระวังคุณภาพข้อมูล:</b> พบแถวที่ SKU ผู้ขายซ้ำกันในไฟล์ TikTok ประมาณ ' + fmtInt(ttMap.__stats.dupSkuCount) + ' แถว (นับรวม Base SKU ที่ชนกันจากหลายไซส์/สี) — Snapshot History จะบันทึกตาม Seller SKU ที่แน่นอน หากมี Seller SKU ซ้ำกันเป๊ะ ระบบจะเก็บแค่ค่าล่าสุดต่อวันนั้น แนะนำให้ตรวจสอบไฟล์ต้นทางจาก TikTok Seller Center</p>' : ''),
     ].join('');
