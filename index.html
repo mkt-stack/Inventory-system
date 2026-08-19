@@ -745,12 +745,11 @@
 
       <div class="note-box" style="margin-bottom:14px;">
         <b>+ เพิ่มสินค้าที่หมดสต็อกเอง</b>
-        <p class="section-desc" style="margin:6px 0 10px;">เผื่อระบบยังตรวจไม่เจอ (เช่น ข้อมูลยังไม่อัปเดต) — พิมพ์หรือเลือก Product Code เพื่อดึงทุกไซส์/สีของสินค้านั้นมาแสดง ติ๊กเฉพาะไซส์/สีที่หมดจริง แล้วใส่วันที่คาดว่าจะเติมสต็อกครั้งเดียวให้ทุกแถวที่ติ๊กไว้</p>
+        <p class="section-desc" style="margin:6px 0 10px;">เผื่อระบบยังตรวจไม่เจอ (เช่น ข้อมูลยังไม่อัปเดต) — ค้นหาด้วย Product Code, Product Name หรือ SKU แล้วใส่วันที่คาดว่าจะเติมสต็อกที่แถวนั้นได้เลย</p>
         <div class="filter-bar" style="margin-bottom:0;">
-          <input type="text" id="manualAddProductCode" list="productCodeDatalist" placeholder="พิมพ์หรือเลือก Product Code...">
-          <datalist id="productCodeDatalist"></datalist>
+          <input type="text" id="manualAddSearch" placeholder="ค้นหา Product Code, Product Name, SKU...">
         </div>
-        <div id="manualAddVariants"></div>
+        <div id="manualAddResults"></div>
       </div>
 
       <div class="table-scroll" style="max-height:60vh; overflow-y:auto;">
@@ -1912,65 +1911,67 @@
 
   /* ---------------------- MANUAL "ADD OUT OF STOCK" PICKER ---------------------- */
   // Lets a user assert a SKU is out of stock even when TikTok/Bird data hasn't caught up to
-  // that reality yet (e.g. a store clerk knows a size just sold out). Search is by Product
-  // Code across ALL analyzed rows (not just the auto-detected 227) so this can flag anything.
-  function populateProductCodeDatalist(){
-    const codes = Array.from(new Set(rows.map(function(r){ return r.productCode; }).filter(Boolean))).sort();
-    document.getElementById('productCodeDatalist').innerHTML = codes.map(function(c){ return '<option value="'+escapeHtml(c)+'">'; }).join('');
-  }
-  function renderManualAddVariants(productCode){
-    const el = document.getElementById('manualAddVariants');
-    if (!productCode){ el.innerHTML = ''; return; }
-    const variants = rows.filter(function(r){ return r.productCode===productCode; });
-    // Silent-clear (no "not found" message) while the user is still mid-typing — the
-    // <datalist> dropdown already gives them live feedback on which codes are valid.
-    if (!variants.length){ el.innerHTML = ''; return; }
+  // that reality yet (e.g. a store clerk knows a size just sold out). Search matches Product
+  // Code, Product Name, or SKU across ALL analyzed rows (not just the auto-detected 227), so
+  // this can flag anything — setting a date on a result row marks it immediately, no separate
+  // select-then-apply step.
+  const MANUAL_ADD_RESULT_CAP = 200;
+  function renderManualAddResults(query){
+    const el = document.getElementById('manualAddResults');
+    const q = query.toLowerCase();
+    if (q.length < 2){ el.innerHTML = ''; return; }
+    const matches = rows.filter(function(r){
+      const hay = [r.productCode, r.productName, r.sku, r.baseSku].join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+    if (!matches.length){
+      el.innerHTML = '<p class="section-desc" style="margin:8px 0 0;">ไม่พบรายการที่ตรงกับ "'+escapeHtml(query)+'"</p>';
+      return;
+    }
+    const capped = matches.slice(0, MANUAL_ADD_RESULT_CAP);
     el.innerHTML =
-      '<div class="table-scroll" style="max-height:220px; overflow-y:auto; margin-top:10px;">' +
+      '<div class="table-scroll" style="max-height:300px; overflow-y:auto; margin-top:10px;">' +
       '<table><thead><tr>' +
-      '<th style="width:30px;"><input type="checkbox" id="manualAddSelectAll" checked></th>' +
-      '<th>SKU</th><th>Color</th><th>Size</th><th class="num">TikTok</th><th class="num">Bird</th>' +
+      '<th>Product Code</th><th>Product Name</th><th>SKU</th><th>Color</th><th>Size</th>' +
+      '<th class="num">TikTok Stock</th><th class="num">Bird Available</th><th class="num">Bird NONL</th><th class="num">Bird NOFF</th>' +
+      '<th>วันที่คาดว่าจะเติมสต็อก</th>' +
       '</tr></thead><tbody>' +
-      variants.map(function(v){
-        return '<tr><td class="focus-cell"><input type="checkbox" class="manual-add-variant-check" data-sku="'+escapeHtml(v.sku)+'" checked></td>'+
+      capped.map(function(v){
+        return '<tr><td class="mono">'+escapeHtml(v.productCode||'—')+'</td>'+
+          '<td class="truncate" title="'+escapeHtml(v.productName||'')+'">'+escapeHtml(v.productName||'(ไม่มีชื่อ)')+'</td>'+
           '<td class="mono">'+escapeHtml(displaySku(v))+'</td>'+
           '<td>'+escapeHtml(v.color||'—')+'</td><td>'+escapeHtml(v.size||'—')+'</td>'+
           '<td class="num">'+fmtInt(v.tiktokStock)+'</td>'+
-          '<td class="num">'+(v.birdStatus==='OK'?fmtInt(v.birdStock):birdBadge(v.birdStatus, birdExtraLabel(v)))+'</td></tr>';
+          '<td class="num">'+(v.birdStatus==='OK'?fmtInt(v.birdStock):birdBadge(v.birdStatus, birdExtraLabel(v)))+'</td>'+
+          '<td class="num">'+fmtInt(v.birdNonl)+'</td>'+
+          '<td class="num">'+fmtInt(v.birdNoff)+'</td>'+
+          '<td><input type="date" class="manual-add-date-input" data-sku="'+escapeHtml(v.sku)+'" value="'+escapeHtml(restockEta.get(v.sku)||'')+'"></td></tr>';
       }).join('') +
       '</tbody></table></div>' +
-      '<div class="filter-bar" style="margin-top:10px; margin-bottom:0;">' +
-      '<input type="date" id="manualAddDate">' +
-      '<button class="btn btn-primary btn-sm" id="manualAddApplyBtn" type="button">✔ ทำเครื่องหมายว่าหมดสต็อก + บันทึกวันที่</button>' +
-      '<div class="spacer"></div></div>';
-    document.getElementById('manualAddSelectAll').addEventListener('change', function(){
-      const on = this.checked;
-      Array.from(el.querySelectorAll('.manual-add-variant-check')).forEach(function(cb){ cb.checked = on; });
-    });
-    document.getElementById('manualAddApplyBtn').addEventListener('click', function(){
-      const dateVal = document.getElementById('manualAddDate').value;
-      const checked = Array.from(el.querySelectorAll('.manual-add-variant-check:checked'));
-      if (!checked.length){ setStatus('เลือกอย่างน้อย 1 ไซส์/สี ก่อนบันทึก', 'err'); return; }
-      checked.forEach(function(cb){
-        const sku = cb.getAttribute('data-sku');
-        manualStockedOut.add(sku);
-        if (dateVal) restockEta.set(sku, dateVal); else restockEta.delete(sku);
+      (matches.length>MANUAL_ADD_RESULT_CAP ? '<div class="dz-meta" style="margin-top:8px;">พบ '+fmtInt(matches.length)+' รายการ แสดง '+fmtInt(MANUAL_ADD_RESULT_CAP)+' รายการแรก — ค้นหาให้เจาะจงขึ้นเพื่อดูที่เหลือ</div>' : '');
+    Array.from(el.querySelectorAll('.manual-add-date-input')).forEach(function(input){
+      input.addEventListener('change', function(){
+        const sku = input.getAttribute('data-sku');
+        if (input.value){
+          manualStockedOut.add(sku);
+          restockEta.set(sku, input.value);
+          setStatus('บันทึกวันที่คาดว่าจะเติมสต็อกของ ' + sku + ' แล้ว', 'ok');
+        } else {
+          manualStockedOut.delete(sku);
+          restockEta.delete(sku);
+        }
+        renderStockedOutModalBody();
+        renderCriticalActionPanels();
       });
-      document.getElementById('manualAddProductCode').value = '';
-      el.innerHTML = '';
-      renderStockedOutModalBody();
-      renderCriticalActionPanels();
-      setStatus('เพิ่ม ' + fmtInt(checked.length) + ' SKU เข้ารายการหมดสต็อกแล้ว', 'ok');
     });
   }
-  document.getElementById('manualAddProductCode').addEventListener('input', function(){
-    renderManualAddVariants(this.value.trim());
+  document.getElementById('manualAddSearch').addEventListener('input', function(){
+    renderManualAddResults(this.value.trim());
   });
 
   function openStockedOutModal(){
-    populateProductCodeDatalist();
-    document.getElementById('manualAddProductCode').value = '';
-    document.getElementById('manualAddVariants').innerHTML = '';
+    document.getElementById('manualAddSearch').value = '';
+    document.getElementById('manualAddResults').innerHTML = '';
     renderStockedOutModalBody();
     document.getElementById('stockedOutModalBackdrop').classList.add('open');
   }
