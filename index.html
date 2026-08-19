@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TikTok Stock Replenishment System</title>
+<title>Stock Monitoring System</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   .viz-root {
@@ -243,6 +243,12 @@
 
   .note-box { font-size: 12px; color: var(--text-secondary); background: var(--page-plane); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; line-height:1.55; }
   .note-box b { color: var(--text-primary); }
+  .note-box table { font-size: 12.5px; }
+  .note-box .table-scroll { border-radius: 8px; }
+  input[type=date].restock-eta-input {
+    background: var(--surface-1); border: 1px solid var(--border); color: var(--text-primary);
+    border-radius: 7px; padding: 5px 8px; font-size: 12px; font-family: inherit; color-scheme: inherit;
+  }
 
   .two-col { display:grid; grid-template-columns: 1.1fr 1.4fr; gap: 16px; align-items: start; }
   @media (max-width: 980px) { .two-col { grid-template-columns: 1fr; } }
@@ -300,7 +306,7 @@
     <div class="brand">
       <div class="logo">RP</div>
       <div>
-        <h1>TikTok Stock Replenishment System</h1>
+        <h1>Stock Monitoring System</h1>
         <p>ดู Stock ฝั่ง TikTok และตัดสินใจว่าวันนี้ควรเบิกอะไรจาก Bird Warehouse เท่าไหร่</p>
       </div>
     </div>
@@ -310,8 +316,8 @@
   <div class="card">
     <h2 class="section-title">1. อัปโหลดไฟล์ข้อมูล</h2>
     <p class="section-desc">
-      <b>TikTok Seller Center Stock</b> คือ Master Dataset ของระบบนี้ — ทุก SKU ที่มีใน TikTok จะถูกวิเคราะห์เสมอ
-      <b>Bird Warehouse Stock</b> ใช้เป็นแหล่งสำหรับ Lookup ว่ามีของให้เบิกเท่าไหร่เท่านั้น — SKU ที่มีใน Bird แต่ไม่ได้ขายบน TikTok จะไม่ถูกนำมาแสดงหรือวิเคราะห์
+      <b>TikTok Seller Center Stock</b> คือ Master Dataset ของระบบนี้ — ทุก SKU ที่มีใน TikTok และแมตช์เจอใน Bird จะถูกวิเคราะห์เสมอ
+      <b>Bird Warehouse Stock</b> ใช้เป็นแหล่งสำหรับ Lookup ว่ามีของให้เบิกเท่าไหร่ — SKU ที่มีใน Bird แต่ไม่ได้ขายบน TikTok จะไม่ถูกนำมาแสดงหรือวิเคราะห์ และในทางกลับกัน SKU ที่มีบน TikTok แต่หาไม่เจอใน Bird เลยก็จะถูกตัดออกจากการวิเคราะห์เช่นกัน เพราะไม่มีข้อมูลให้เบิกได้
     </p>
     <div class="upload-grid">
       <div class="dropzone" id="dzTikTok">
@@ -335,6 +341,14 @@
     </div>
 
     <div class="config-row">
+      <div class="config-field">
+        <label for="leadTimeInput" title="ใช้กำหนดจุด Reorder (P2) และวันที่ควรสั่ง (Order By) — ยังไม่มีข้อมูล Lead Time จริงต่อ SKU/Supplier จึงเป็นค่าเดียวที่ปรับได้">Lead Time เฉลี่ย (วัน)</label>
+        <input type="number" id="leadTimeInput" min="0" step="1" value="4">
+      </div>
+      <div class="config-field">
+        <label for="campaignMultiplierInput" title="คูณเข้ากับ Est. Daily Usage สำหรับพยากรณ์ยอดขายช่วง Campaign/LIVE เท่านั้น — ไม่กระทบตัวเลข Est. Daily Usage ที่แสดงในตาราง">Campaign Multiplier (×คาดการณ์ยอดขาย)</label>
+        <input type="number" id="campaignMultiplierInput" min="0.1" step="0.1" value="1">
+      </div>
       <div class="config-spacer"></div>
       <div style="display:flex; gap:10px;">
         <button class="btn btn-ghost" id="resetBtn" type="button">ล้างข้อมูลทั้งหมด</button>
@@ -385,8 +399,8 @@
       </div>
       <div class="filter-bar" style="margin-top:12px; margin-bottom:0;">
         <div class="spacer"></div>
-        <button class="btn btn-ghost btn-sm" id="exportFocusBtn" type="button">⬇ Export Focus List (.json)</button>
-        <button class="btn-link" id="importFocusBtn" type="button">📂 Import Focus List</button>
+        <button class="btn btn-ghost btn-sm" id="exportFocusBtn" type="button">⬇ Export Focus List & Restock ETA (.json)</button>
+        <button class="btn-link" id="importFocusBtn" type="button">📂 Import Focus List & Restock ETA</button>
         <input type="file" id="importFocusInput" accept=".json" style="display:none">
       </div>
     </div>
@@ -394,6 +408,7 @@
     <div class="card hero">
       <h2 class="section-title">🎯 TODAY'S REPLENISHMENT <span class="count-pill" id="todayCountPill"></span></h2>
       <p class="section-desc">รายการที่ควรพิจารณาเบิกวันนี้ เรียงตาม Priority (P0 → P4) แล้วตาม Estimated Days Left จากน้อยไปมาก</p>
+      <div id="criticalActionPanels"></div>
       <div class="filter-bar">
         <input type="text" id="todaySearchBox" placeholder="ค้นหา Product Name, Product Code, SKU...">
         <select id="todayFamilyFilter"><option value="">All Families</option></select>
@@ -423,6 +438,8 @@
               <th data-key="trend">Trend</th>
               <th class="num" data-key="suggestedQty">Suggested</th>
               <th class="num" data-key="finalQty">Final</th>
+              <th class="num" data-key="salesAtRisk" title="Suggested Qty × ราคาขาย — โอกาสเสียยอดขายถ้าไม่เติมสต็อก SKU นี้">Sales at Risk (฿)</th>
+              <th data-key="orderByDate" title="วันล่าสุดที่ควรสั่ง/เบิก โดยคำนวณจาก Days Left − Lead Time">Order By</th>
               <th data-key="recommendation">Recommendation</th>
             </tr>
           </thead>
@@ -454,6 +471,7 @@
               <th class="num">Critical (P0)</th>
               <th class="num">Suggested Qty</th>
               <th class="num" title="รวมเฉพาะ SKU ที่ Bird มีข้อมูลปกติ (สถานะ OK) เท่านั้น">Bird Available</th>
+              <th class="num" title="Suggested Qty × ราคาขาย รวมทั้ง Family">Sales at Risk (฿)</th>
               <th class="num">Avg Days Left</th>
             </tr>
           </thead>
@@ -493,7 +511,6 @@
       <div class="filter-bar" style="margin-top:12px;">
         <select id="dqIssueFilter">
           <option value="">แสดงปัญหา: ทั้งหมด</option>
-          <option value="notFound">Not Found in Bird</option>
           <option value="dupSku">Duplicate SKU</option>
           <option value="missingCode">Missing Product Code</option>
           <option value="missingName">Missing Product Name</option>
@@ -501,6 +518,7 @@
           <option value="missingSize">Missing Size</option>
           <option value="negative">Negative Bird Stock</option>
           <option value="oddSku">Unexpected SKU Format</option>
+          <option value="missingPrice">Missing Price Data</option>
         </select>
         <div class="spacer"></div>
         <button class="btn btn-ghost btn-sm" id="dqExportBtn" type="button">⬇ Export CSV</button>
@@ -535,7 +553,6 @@
         <select id="birdStatusFilter">
           <option value="">Bird Status: All</option>
           <option value="OK">OK</option>
-          <option value="NOT_FOUND">Not Found in Bird</option>
           <option value="NONL">NONL</option>
           <option value="NOFF">NOFF</option>
           <option value="NEGATIVE">Negative (ผิดปกติ)</option>
@@ -566,14 +583,14 @@
               <th class="num" data-key="birdNoff" title="Bird NOFF — สต็อกออฟไลน์/หน้าร้านดิบจากไฟล์ Bird">Bird NOFF</th>
               <th class="num" data-key="birdTotal" title="Bird Total = NONL + NOFF">Bird Total</th>
               <th class="num" data-key="birdStock" title="จำนวนที่เบิกได้จริงจาก Bird Warehouse (จากคอลัมน์ Available Online Stock) — ถ้าไม่ใช่ตัวเลข ดูคำอธิบายที่คอลัมน์ Bird Status">Bird Available<span class="th-tip">จำนวนที่เบิกได้จาก Bird</span></th>
-              <th data-key="birdMatchStatus" title="MATCHED = พบ SKU นี้ในไฟล์ Bird / NOT FOUND = ไม่พบเลย">Bird Match</th>
-              <th data-key="birdStatus" title="สถานะข้อมูลของ Bird สำหรับ SKU นี้ — ชี้เมาส์ที่ป้ายในตารางเพื่อดูความหมายของแต่ละสถานะ (OK / NOT FOUND / NONL / NOFF / NEGATIVE / BLANK)">Bird Status<span class="th-tip">ชี้เมาส์ที่ป้ายเพื่อดูความหมาย</span></th>
+              <th data-key="birdStatus" title="สถานะข้อมูลของ Bird สำหรับ SKU นี้ — ชี้เมาส์ที่ป้ายในตารางเพื่อดูความหมายของแต่ละสถานะ (OK / NONL / NOFF / NEGATIVE / BLANK)">Bird Status<span class="th-tip">ชี้เมาส์ที่ป้ายเพื่อดูความหมาย</span></th>
               <th class="num" data-key="dailyChange" title="TikTok Stock วันนี้ − TikTok Stock วันก่อนหน้า (snapshot ล่าสุด 2 วัน) — บวก = สต็อกเพิ่ม/เติมเข้า, ลบ = สต็อกลด/ขายออก">Daily Stock Change</th>
               <th data-key="trend">Stock Trend</th>
               <th class="num" data-key="usage" title="Estimated Daily Usage — ประมาณจากการลดลงของ TikTok Stock ไม่ใช่ยอดขายจริง">Est. Daily Usage<span class="th-tip">ไม่ใช่ยอดขายจริง</span></th>
               <th class="num" data-key="daysLeft">Est. Days Left</th>
               <th class="num" data-key="suggestedQty">Suggested Qty</th>
               <th class="num" data-key="finalQty">Final Qty</th>
+              <th class="num" data-key="salesAtRisk" title="Suggested Qty × ราคาขาย (Current/Original Selling Price จาก Bird) — โอกาสเสียยอดขายถ้าไม่เติมสต็อก SKU นี้">Sales at Risk (฿)</th>
               <th data-key="replenishStatus">Replenishment Status</th>
               <th data-key="priority">Priority</th>
             </tr>
@@ -698,12 +715,26 @@
   const CONFIG = {
     targetCoverDays: 14,
     safetyDays: 3,
-    reorderTriggerDays: 7,     // maps to the P2 boundary
+    // Lead Time = how many days it takes for a Bird replenishment to actually land once
+    // ordered. No per-SKU/per-supplier lead time exists in either source file, so this is a
+    // single tunable default (editable via the Lead Time input) rather than derived data.
+    // The P2 reorder-trigger boundary is DERIVED from it (see reorderTriggerDays() below) so
+    // adjusting Lead Time changes both WHEN a SKU is flagged P2 and each row's Order By date.
+    leadTimeDays: 4,
     p0Days: 2,                 // fixed boundary — Critical
     p1Days: 5,                 // fixed boundary — Urgent
     rollingWindowSnapshots: 7, // how many recent snapshots feed usage/trend
     trend: { fastMultiplier: 1.3, slowMultiplier: 0.5, stableLow: 0.8, stableHigh: 1.2 },
   };
+  // P2 boundary = Lead Time + Safety Days (textbook reorder-point logic) — kept as a function
+  // instead of a fixed constant so it always reflects the current Lead Time input.
+  function reorderTriggerDays(){ return CONFIG.leadTimeDays + CONFIG.safetyDays; }
+  // Manual demand multiplier for a known Campaign/LIVE day — no campaign calendar exists in
+  // either source file, so this is a manual override the ops person sets before/during a
+  // campaign, applied to the measured usage rate for daysLeft/Suggested Qty/Sales at Risk.
+  // Deliberately NEVER changes the raw "Est. Daily Usage" figure shown in tables — that stays
+  // an honest reflection of measured stock movement; only the forward-looking numbers scale.
+  let campaignMultiplier = 1;
 
   /* ---------------------------- THEME TOGGLE ---------------------------- */
   const themeToggle = document.getElementById('themeToggle');
@@ -734,9 +765,11 @@
   // Recomputed every recomputeRows() call; read by recordSnapshot() and finalizeRow().
   let dupSellerSkuCounts = new Map();
   let familyRollup = [];
+  let productSizeRisk = new Map(); // productCode -> { isMixed, criticalCount, healthyCount } — see buildSizeRiskMap()
   let snapshotStore = new Map();  // sku -> [{date, stock}] sorted ascending, never overwrites older dates
   let snapshotRunLog = [];        // [{date, skuCount, totalStock}] — one entry per analyze day (same-day re-run updates in place)
   let focusedSkus = new Set();    // SKUs the user has starred to watch — survives Reset, exportable/importable as JSON
+  let restockEta = new Map();     // sku -> 'YYYY-MM-DD' expected restock date, for SKUs out of stock everywhere — survives Reset like focusedSkus, same Export/Import JSON
 
   let isAnalyzing = false;
   let sortKey = '', sortDir = 'desc';
@@ -773,6 +806,21 @@
   function fmtTime(d){
     const pad = x => String(x).padStart(2,'0');
     return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  }
+  // "Today" for date math (Order By date, restock ETA comparisons) — for an auto-loaded
+  // static daily report this must be the report's own snapshot date, not the real current
+  // date, or reopening an old report days later would compute wrong Order By dates.
+  function effectiveToday(){
+    return snapshotDateOverride ? new Date(snapshotDateOverride+'T00:00:00') : new Date();
+  }
+  function addDays(date, days){
+    const d = new Date(date);
+    d.setDate(d.getDate() + Math.round(days));
+    return d;
+  }
+  function fmtCurrency(n){
+    if (n===null || n===undefined || Number.isNaN(n) || !isFinite(n)) return '—';
+    return '฿' + Math.round(n).toLocaleString('en-US');
   }
   function findColIndex(headerRow, candidates){
     if (!headerRow) return -1;
@@ -854,6 +902,8 @@
     const iCategory = findColIndex(header, ['New Category']);
     const iNoff     = findColIndex(header, ['NOFF']);
     const iNonl     = findColIndex(header, ['NONL']);
+    const iSellPrice = findColIndex(header, ['Current Selling Price']);
+    const iOrigPrice = findColIndex(header, ['Original Price']);
 
     const map = new Map();
     let dupSkuCount = 0, missingNameCount = 0, missingCodeCount = 0;
@@ -898,6 +948,14 @@
       const nonlQty = nonlCls.numeric;      // null if blank/text/negative-cleared source
       const birdTotal = (nonlQty!==null || noffQty!==null) ? ((nonlQty||0) + (noffQty||0)) : null;
 
+      // Sales at Risk needs a selling price per SKU. Prefer Current Selling Price (what it
+      // actually transacts at today); fall back to Original Price only when Current is
+      // missing/zero. A price of exactly 0 is treated the same as missing — never a real price.
+      const sellPriceRaw = iSellPrice!==-1 ? toRawNum(row[iSellPrice]) : null;
+      const origPriceRaw = iOrigPrice!==-1 ? toRawNum(row[iOrigPrice]) : null;
+      const sellingPrice = (sellPriceRaw!==null && sellPriceRaw>0) ? sellPriceRaw :
+        ((origPriceRaw!==null && origPriceRaw>0) ? origPriceRaw : null);
+
       const birdRow = {
         sku, productCode, productName,
         color: iColor!==-1 ? norm(row[iColor]) : '',
@@ -908,7 +966,7 @@
         category: iCategory!==-1 ? norm(row[iCategory]) : '',
         birdNumeric, birdStatus, birdNegativeRaw,
         birdOfflineQty: (birdStatus==='NOFF' ? noffQty : null),
-        nonlQty, noffQty, birdTotal,
+        nonlQty, noffQty, birdTotal, sellingPrice,
       };
       if (map.has(sku)) dupSkuCount++;
       map.set(sku, birdRow);
@@ -1082,14 +1140,13 @@
     if (insufficientHistory || daysLeft===null) return 'NEW_INSUFFICIENT_DATA';
     if (daysLeft <= CONFIG.p0Days) return 'P0';
     if (daysLeft <= CONFIG.p1Days) return 'P1';
-    if (daysLeft <= CONFIG.reorderTriggerDays) return 'P2';
+    if (daysLeft <= reorderTriggerDays()) return 'P2';
     if (daysLeft <= CONFIG.targetCoverDays) return 'P3';
     return 'P4';
   }
 
   function buildRecommendation(row){
     if (row.birdStatus !== 'OK'){
-      if (row.birdStatus==='NOT_FOUND') return 'CHECK BIRD — SKU NOT FOUND';
       if (row.birdStatus==='NONL') return 'CHECK BIRD — NONL';
       if (row.birdStatus==='NOFF') return 'CHECK BIRD — NOFF';
       if (row.birdStatus==='NEGATIVE') return 'CHECK BIRD — NEGATIVE STOCK';
@@ -1130,14 +1187,13 @@
     INSUFFICIENT_DATA: { label:'Insufficient Data', cls:'muted' },
   };
   const BIRD_STATUS_META = {
-    OK: { cls:'good' }, NOT_FOUND: { cls:'critical' }, NONL: { cls:'warning' }, NOFF: { cls:'serious' },
+    OK: { cls:'good' }, NONL: { cls:'warning' }, NOFF: { cls:'serious' },
     NEGATIVE: { cls:'critical' }, BLANK: { cls:'muted' }, 'N/A': { cls:'muted' }, OTHER: { cls:'muted' },
   };
   // Plain-Thai hover explanations for each Bird Status code — shown as a native
   // tooltip on every status badge so a Leader doesn't need to memorize the codes.
   const BIRD_STATUS_TIP = {
     OK: 'มีตัวเลขสต็อกออนไลน์ (คอลัมน์ NONL) ปกติจาก Bird — ใช้คำนวณแนะนำเบิกได้',
-    NOT_FOUND: 'หา SKU นี้ไม่เจอในไฟล์ Bird เลย — สินค้าอาจยังไม่ลงทะเบียนใน Bird หรือ SKU ไม่ตรงกัน (ไม่ใช่สต็อก 0)',
     NONL: 'ช่องสต็อกออนไลน์ (คอลัมน์ NONL) มีค่าเป็นข้อความ ไม่ใช่ตัวเลข ระบบอ่านเป็นจำนวนไม่ได้ — ควรตรวจสอบไฟล์ต้นทางจาก Bird',
     NOFF: 'สต็อกออนไลน์ (NONL) เท่ากับ 0 หรือว่างเปล่า แต่มีสต็อกออฟไลน์ (คอลัมน์ NOFF) เหลืออยู่ — ของมีจริงแต่จัดสรรให้หน้าร้าน/ออฟไลน์ ไม่ได้จัดสรรให้ช่องทางออนไลน์ จึงเบิกให้ TikTok ไม่ได้ทันทีจนกว่าจะโยกสต็อก',
     NEGATIVE: 'ค่าสต็อกออนไลน์ (NONL) จาก Bird ติดลบ ซึ่งเป็นข้อมูลผิดปกติในไฟล์ต้นทาง — ต้องแจ้งทีม Bird ให้ตรวจสอบก่อน',
@@ -1168,6 +1224,8 @@
   /* ------------------------------ ROW BUILD -------------------------------- */
   // Identity + Bird lookup only — independent of snapshot history so it can
   // be reused when the user imports older snapshot history without re-parsing files.
+  // birdRow is always non-null here — runAnalysis() only builds a base row once a Bird match
+  // was found; unmatched TikTok SKUs are excluded from the analysis entirely (see excludedNotFoundCount).
   function buildBaseRow(ttRow, birdRow, masterInfo){
     const productCode = birdRow ? birdRow.productCode : '';
     const productName = (masterInfo && masterInfo.productName) || ttRow.productName || (birdRow ? birdRow.productName : '') || '';
@@ -1179,11 +1237,11 @@
       if (sug) suggestedFamily = sug;
       family = 'UNMAPPED';
     }
-    const birdStock = birdRow ? birdRow.birdNumeric : null;
-    const birdStatus = birdRow ? birdRow.birdStatus : 'NOT_FOUND';
+    const birdStock = birdRow.birdNumeric;
+    const birdStatus = birdRow.birdStatus;
     const subCollection = (birdRow && birdRow.subCollection) || 'UNMAPPED';
     const category = (birdRow && birdRow.category) || 'UNMAPPED';
-    const birdMatchStatus = birdRow ? 'MATCHED' : 'NOT FOUND';
+    const sellingPrice = birdRow.sellingPrice;
     return {
       sku: ttRow.sellerSku, baseSku: ttRow.baseSku,
       tiktokStock: ttRow.available, tiktokTotal: ttRow.total, tiktokLocked: ttRow.locked,
@@ -1194,7 +1252,7 @@
       birdNonl: birdRow ? birdRow.nonlQty : null,
       birdNoff: birdRow ? birdRow.noffQty : null,
       birdTotal: birdRow ? birdRow.birdTotal : null,
-      birdMatchStatus,
+      sellingPrice,
     };
   }
 
@@ -1212,11 +1270,15 @@
     // pollution doesn't carry forward once the source duplicate is fixed.
     const history = isDupSellerSku ? [] : (snapshotStore.get(base.sku) || []);
     const usageInfo = computeUsageAndTrend(history);
-    const daysLeft = computeDaysLeft(base.tiktokStock, usageInfo.usage);
+    // Campaign/LIVE multiplier scales the FORECAST only (days left, target stock, suggested
+    // qty, sales at risk) — the raw "Est. Daily Usage" shown in tables stays the honest,
+    // unscaled, measured figure (see CONFIG.campaignMultiplier comment above).
+    const effectiveUsage = usageInfo.usage!==null ? usageInfo.usage*campaignMultiplier : null;
+    const daysLeft = computeDaysLeft(base.tiktokStock, effectiveUsage);
     const priority = computePriority(base.birdStatus, daysLeft, usageInfo.insufficientHistory);
 
-    const canPlan = usageInfo.usage!==null && usageInfo.usage>0;
-    const targetStock = canPlan ? usageInfo.usage*(CONFIG.targetCoverDays+CONFIG.safetyDays) : null;
+    const canPlan = effectiveUsage!==null && effectiveUsage>0;
+    const targetStock = canPlan ? effectiveUsage*(CONFIG.targetCoverDays+CONFIG.safetyDays) : null;
     const suggestedQty = targetStock!==null ? Math.max(targetStock - base.tiktokStock, 0) : null;
     const canReplenish = base.birdStatus==='OK';
     const finalQty = (suggestedQty!==null && canReplenish) ? Math.min(suggestedQty, base.birdStock) : null;
@@ -1235,11 +1297,21 @@
     // runs before finalizeRow), so this is simply the last two entries' difference.
     const dailyChange = history.length>=2 ? (history[history.length-1].stock - history[history.length-2].stock) : null;
 
+    // Sales at Risk (฿) = Suggested Qty (the demand current stock can't cover) × Selling
+    // Price — never coerced to 0 when the price is unknown, only when there's genuinely
+    // nothing at risk (suggestedQty === 0).
+    const salesAtRisk = (suggestedQty!==null && base.sellingPrice!==null) ? suggestedQty*base.sellingPrice : null;
+
+    // Order By = latest date an order can be placed and still land before stockout, given
+    // Lead Time. daysLeft <= leadTimeDays means the buffer is already gone — order today.
+    const mustOrderNow = daysLeft!==null && daysLeft <= CONFIG.leadTimeDays;
+    const orderByDate = daysLeft!==null ? addDays(effectiveToday(), Math.max(daysLeft - CONFIG.leadTimeDays, 0)) : null;
+
     const row = Object.assign({}, base, {
-      usage: usageInfo.usage, insufficientHistory: usageInfo.insufficientHistory,
+      usage: usageInfo.usage, effectiveUsage, insufficientHistory: usageInfo.insufficientHistory,
       trend: usageInfo.trend, lastEventType: usageInfo.lastEventType,
       daysLeft, priority, targetStock, suggestedQty, finalQty, shortage, replenishStatus,
-      dailyChange, isDupSellerSku,
+      dailyChange, isDupSellerSku, salesAtRisk, mustOrderNow, orderByDate,
       snapshotCount: history.length,
     });
     row.recommendation = buildRecommendation(row);
@@ -1305,11 +1377,19 @@
 
       const ttList = ttMap.__list || [];
       const bases = [];
+      // TikTok SKUs with no Bird match at all carry no warehouse data to analyze or
+      // replenish from, so — symmetric to how Bird-only SKUs are already excluded above —
+      // they're dropped from the analysis entirely rather than shown as a permanent "Not
+      // Found" data-quality flag. The count is surfaced in setStatus/renderNotes so nothing
+      // silently disappears.
+      let excludedNotFoundCount = 0;
       for (const ttRow of ttList){
         const birdRow = findBirdMatch(ttRow, birdMap, normBirdIdx);
+        if (!birdRow){ excludedNotFoundCount++; continue; }
         const masterInfo = getProductMasterInfo(birdRow, productMaster);
         bases.push(buildBaseRow(ttRow, birdRow, masterInfo));
       }
+      bases.__excludedNotFoundCount = excludedNotFoundCount;
       baseRows = bases;
 
       // Auto-loaded static reports carry the exact date their embedded data was pulled
@@ -1327,7 +1407,8 @@
       const capWarning = (ttList.length >= 4990 && ttList.length <= 5000)
         ? ' ⚠ จำนวนแถวใกล้เพดาน 5,000 ของ TikTok Export — ตรวจสอบว่าตรงกับจำนวน SKU ทั้งหมดใน Seller Center หรือไม่ ถ้าน้อยกว่าแสดงว่าไฟล์นี้ไม่ครบ'
         : '';
-      setStatus('วิเคราะห์สำเร็จ — TikTok ' + fmtInt(ttList.length) + ' SKU, Bird ' + fmtInt(birdMap.size) + ' SKU (Lookup)' + capWarning, capWarning ? 'err' : 'ok');
+      const excludedNote = excludedNotFoundCount>0 ? (' · ตัด ' + fmtInt(excludedNotFoundCount) + ' SKU ที่หาไม่เจอใน Bird ออกจากการวิเคราะห์') : '';
+      setStatus('วิเคราะห์สำเร็จ — TikTok ' + fmtInt(ttList.length) + ' SKU, Bird ' + fmtInt(birdMap.size) + ' SKU (Lookup), วิเคราะห์จริง ' + fmtInt(baseRows.length) + ' SKU' + excludedNote + capWarning, capWarning ? 'err' : 'ok');
       document.getElementById('resultsSection').style.display = 'block';
     } catch(err){
       console.error(err);
@@ -1342,7 +1423,20 @@
     baseRows.forEach(function(r){ dupSellerSkuCounts.set(r.sku, (dupSellerSkuCounts.get(r.sku)||0) + 1); });
     rows = baseRows.map(finalizeRow);
     buildFamilyRollup();
+    buildSizeRiskMap();
     populateFilterOptions();
+  }
+  // productCode -> { isMixed, criticalCount, healthyCount } — grouped once per recompute so
+  // the main table can flag "uneven risk across sizes" without re-scanning `rows` per cell.
+  function buildSizeRiskMap(){
+    const byCode = new Map();
+    rows.forEach(function(r){
+      if (!r.productCode) return;
+      if (!byCode.has(r.productCode)) byCode.set(r.productCode, []);
+      byCode.get(r.productCode).push(r);
+    });
+    productSizeRisk = new Map();
+    byCode.forEach(function(variants, code){ productSizeRisk.set(code, computeSizeRisk(variants)); });
   }
 
   /* ---------------------------- FAMILY ROLLUP ------------------------------ */
@@ -1352,7 +1446,7 @@
       const fam = r.family || 'UNMAPPED';
       if (!map.has(fam)) map.set(fam, {
         family: fam, skuCount:0, tiktokStock:0, needReplenish:0, criticalCount:0,
-        suggestedSum:0, birdAvailable:0, daysLeftSum:0, daysLeftN:0,
+        suggestedSum:0, birdAvailable:0, salesAtRiskSum:0, daysLeftSum:0, daysLeftN:0,
       });
       const g = map.get(fam);
       g.skuCount++;
@@ -1361,6 +1455,7 @@
       if (r.priority==='P0') g.criticalCount++;
       if (r.suggestedQty!==null) g.suggestedSum += r.suggestedQty;
       if (r.birdStatus==='OK' && r.birdStock!==null) g.birdAvailable += r.birdStock;
+      if (r.salesAtRisk!==null) g.salesAtRiskSum += r.salesAtRisk;
       if (r.daysLeft!==null && isFinite(r.daysLeft)){ g.daysLeftSum += r.daysLeft; g.daysLeftN++; }
     });
     familyRollup = Array.from(map.values()).map(function(g){
@@ -1398,6 +1493,7 @@
     renderAlertBanner();
     renderGapListPill();
     renderFocus();
+    renderCriticalActionPanels();
     renderTodayTable();
     renderFamilyTable();
     renderKpiTiles();
@@ -1414,21 +1510,21 @@
     rows.forEach(function(r){ skuCounts.set(r.sku, (skuCounts.get(r.sku)||0)+1); });
     return rows.map(function(r){
       const issues = [];
-      if (r.birdMatchStatus==='NOT FOUND') issues.push('notFound');
       if ((skuCounts.get(r.sku)||0) > 1) issues.push('dupSku');
       if (!r.productCode) issues.push('missingCode');
       if (!r.productName) issues.push('missingName');
-      if (r.birdMatchStatus==='MATCHED' && !r.color) issues.push('missingColor');
-      if (r.birdMatchStatus==='MATCHED' && !r.size) issues.push('missingSize');
+      if (!r.color) issues.push('missingColor');
+      if (!r.size) issues.push('missingSize');
       if (r.birdStatus==='NEGATIVE') issues.push('negative');
       if (!/^\d{8,14}(_\d+)?$/.test(r.sku)) issues.push('oddSku');
+      if (r.birdStatus==='OK' && r.sellingPrice===null) issues.push('missingPrice');
       return { r, issues };
     }).filter(function(x){ return x.issues.length>0; });
   }
   const DQ_LABELS = {
-    notFound:'Not Found in Bird', dupSku:'Duplicate SKU', missingCode:'Missing Product Code',
+    dupSku:'Duplicate SKU', missingCode:'Missing Product Code',
     missingName:'Missing Product Name', missingColor:'Missing Color', missingSize:'Missing Size',
-    negative:'Negative Bird Stock', oddSku:'Unexpected SKU Format',
+    negative:'Negative Bird Stock', oddSku:'Unexpected SKU Format', missingPrice:'Missing Price Data',
   };
   function renderDataQuality(){
     dqRowsCache = computeDataQuality();
@@ -1455,9 +1551,8 @@
   /* ------------------------------ SPEC STOCK STATUS -------------------------- */
   // Maps the app's internal Priority/Bird-status model onto the operational status
   // labels from the spec (HEALTHY / WATCH / REPLENISH SOON / REPLENISH NOW /
-  // CRITICAL / OUT OF STOCK / BIRD NOT FOUND / NO WAREHOUSE STOCK / DATA ISSUE).
+  // CRITICAL / OUT OF STOCK / NO WAREHOUSE STOCK / DATA ISSUE).
   function specStockStatus(r){
-    if (r.birdMatchStatus==='NOT FOUND') return 'BIRD NOT FOUND';
     if (r.tiktokStock===0) return 'OUT OF STOCK';
     if (r.birdStatus!=='OK') return 'DATA ISSUE';
     if ((r.birdTotal||0)===0 && r.priority!=='P4') return 'NO WAREHOUSE STOCK';
@@ -1494,14 +1589,18 @@
   function renderAlertBanner(){
     const p0 = rows.filter(r=>r.priority==='P0').length;
     const dataIssue = rows.filter(r=>r.priority==='DATA_ISSUE').length;
+    const totalSalesAtRisk = rows.reduce((s,r)=> s + (r.salesAtRisk||0), 0);
     const el = document.getElementById('alertBanner');
+    const campaignNote = campaignMultiplier!==1 ?
+      '<div class="alert-banner ok" style="margin-bottom:10px;">📢 <b>Campaign Mode Active — ×'+campaignMultiplier+' คาดการณ์ยอดขาย</b> — Days Left / Suggested Qty / Sales at Risk ทั้งหมดปรับตามตัวคูณนี้แล้ว</div>' : '';
     if (p0===0 && dataIssue===0){
-      el.innerHTML = '<div class="alert-banner ok">✅ <b>ไม่มี SKU ที่ต้องเบิกด่วนวันนี้</b> — สต็อก TikTok อยู่ในเกณฑ์ปลอดภัย</div>';
+      el.innerHTML = campaignNote + '<div class="alert-banner ok">✅ <b>ไม่มี SKU ที่ต้องเบิกด่วนวันนี้</b> — สต็อก TikTok อยู่ในเกณฑ์ปลอดภัย</div>';
       return;
     }
-    el.innerHTML = '<div class="alert-banner">' +
+    el.innerHTML = campaignNote + '<div class="alert-banner">' +
       (p0>0 ? '<div class="ai">🔴 <span class="n">'+fmtInt(p0)+'</span> SKU ระดับ Critical (P0) ต้องเบิกด่วน</div>' : '') +
       (dataIssue>0 ? '<div class="ai">⚠️ <span class="n">'+fmtInt(dataIssue)+'</span> SKU มีปัญหาข้อมูล Bird ต้องตรวจสอบก่อนเบิก</div>' : '') +
+      (totalSalesAtRisk>0 ? '<div class="ai">💸 <span class="n">'+fmtCurrency(totalSalesAtRisk)+'</span> โอกาสเสียยอดขายรวมถ้าไม่เติมสต็อกตามคำแนะนำ</div>' : '') +
       '</div>';
   }
 
@@ -1567,21 +1666,124 @@
       td.addEventListener('click', function(){ openProductModal(td.getAttribute('data-sku')); });
     });
   }
+  // Payload carries both the starred-SKU watchlist and restock ETA notes so a single
+  // Export/Import round-trip preserves everything the app can't persist on its own between
+  // browser sessions. Still accepts a bare array (the old export format, focus list only).
   function exportFocusList(){
-    const arr = Array.from(focusedSkus);
-    const blob = new Blob([JSON.stringify(arr)], { type:'application/json' });
+    const restockEtaObj = {};
+    restockEta.forEach(function(dateStr, sku){ restockEtaObj[sku] = dateStr; });
+    const payload = { focusedSkus: Array.from(focusedSkus), restockEta: restockEtaObj };
+    const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = 'focus_watchlist.json';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
-  function mergeImportedFocusList(arr){
+  function mergeImportedFocusList(payload){
+    const skuArr = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.focusedSkus) ? payload.focusedSkus : []);
     let added = 0;
-    (Array.isArray(arr)?arr:[]).forEach(function(sku){
+    skuArr.forEach(function(sku){
       if (typeof sku==='string' && sku && !focusedSkus.has(sku)){ focusedSkus.add(sku); added++; }
     });
+    const etaObj = (payload && !Array.isArray(payload) && payload.restockEta) || {};
+    Object.keys(etaObj).forEach(function(sku){
+      if (typeof etaObj[sku]==='string' && etaObj[sku]) restockEta.set(sku, etaObj[sku]);
+    });
     return added;
+  }
+
+  /* ------------------------------ CRITICAL (P0) ACTION PANELS ------------------------------ */
+  // "Critical (P0)" splits into two operationally distinct alerts:
+  //   1) Allocate from NOFF — online stock (NONL) alone can't cover Suggested Qty, but there's
+  //      offline stock (NOFF) sitting there that can plug some/all of the gap via a manual
+  //      transfer. Scoped to P0 only.
+  //   2) Out of stock everywhere — TikTok AND Bird (NONL+NOFF) are both confirmed zero. Scoped
+  //      to the raw stock condition rather than priority='P0', since a brand-new SKU with no
+  //      usage history yet is classified NEW_INSUFFICIENT_DATA (not P0) and would otherwise
+  //      never surface here — exactly the case where "when is it coming back" matters most.
+  function getNoffAllocationRows(){
+    return rows.filter(function(r){
+      return r.priority==='P0' && r.suggestedQty>0 && r.birdNonl!==null && r.birdNonl>=0 &&
+        r.birdNonl < r.suggestedQty && Math.min(r.suggestedQty-r.birdNonl, r.birdNoff||0) > 0;
+    }).map(function(r){
+      return Object.assign({}, r, { noffAllocation: Math.min(r.suggestedQty-r.birdNonl, r.birdNoff||0) });
+    }).sort(function(a,b){ return b.noffAllocation - a.noffAllocation; });
+  }
+  function getStockedOutRows(){
+    return rows.filter(function(r){ return r.tiktokStock===0 && r.birdTotal===0; })
+      .sort(function(a,b){
+        const aSet = restockEta.has(a.sku) ? 1 : 0, bSet = restockEta.has(b.sku) ? 1 : 0;
+        if (aSet !== bSet) return aSet - bSet; // rows with no ETA yet float to the top
+        return (a.productCode||'').localeCompare(b.productCode||'');
+      });
+  }
+  function restockEtaStatus(sku){
+    const dateStr = restockEta.get(sku);
+    if (!dateStr) return { label:'ยังไม่ระบุ', cls:'muted' };
+    const eta = new Date(dateStr+'T00:00:00');
+    const diffDays = Math.round((eta - effectiveToday()) / 86400000);
+    if (diffDays < 0) return { label:'เลยกำหนดแล้ว ('+dateStr+')', cls:'critical' };
+    if (diffDays === 0) return { label:'วันนี้ ('+dateStr+')', cls:'warning' };
+    return { label:'อีก '+fmtInt(diffDays)+' วัน ('+dateStr+')', cls:'info' };
+  }
+  function renderCriticalActionPanels(){
+    const el = document.getElementById('criticalActionPanels');
+    if (!el) return;
+    const noffRows = getNoffAllocationRows();
+    const stockedOutRows = getStockedOutRows();
+    if (noffRows.length===0 && stockedOutRows.length===0){ el.innerHTML=''; return; }
+
+    let html = '';
+    if (noffRows.length>0){
+      html += '<div class="note-box" style="border-color: var(--warning); margin-bottom:12px;">' +
+        '<b>🚨 ของเบิกด่วน — Allocate จาก NOFF (' + fmtInt(noffRows.length) + ' SKU)</b>' +
+        '<p class="section-desc" style="margin:6px 0 10px;">Critical (P0) ที่สต็อกออนไลน์ (NONL) ไม่พอตาม Suggested Qty แต่มีสต็อกออฟไลน์ (NOFF) เหลืออยู่ — โยกจาก NOFF เข้าออนไลน์ตามจำนวนนี้ก่อน แล้วค่อยเบิกจริง</p>' +
+        '<div class="table-scroll" style="max-height:320px; overflow-y:auto;"><table><thead><tr>' +
+        '<th>Product Code</th><th>Product Name</th><th>SKU</th>' +
+        '<th class="num">Suggested</th><th class="num">NONL (Online)</th><th class="num">NOFF (Offline)</th>' +
+        '<th class="num">Allocate from NOFF</th></tr></thead><tbody>' +
+        noffRows.map(function(r){
+          return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
+            '<td class="strong truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
+            '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
+            '<td class="num">'+fmtInt(r.suggestedQty)+'</td>'+
+            '<td class="num">'+fmtInt(r.birdNonl)+'</td>'+
+            '<td class="num">'+fmtInt(r.birdNoff)+'</td>'+
+            '<td class="num strong rec-text warning">'+fmtInt(r.noffAllocation)+'</td></tr>';
+        }).join('') +
+        '</tbody></table></div></div>';
+    }
+    if (stockedOutRows.length>0){
+      html += '<div class="note-box" style="border-color: var(--critical);">' +
+        '<b>⛔ สินค้าหมดสต็อกทุกช่องทาง (' + fmtInt(stockedOutRows.length) + ' SKU)</b>' +
+        '<p class="section-desc" style="margin:6px 0 10px;">TikTok และ Bird (NONL+NOFF) เป็น 0 ทั้งคู่ — รวมถึง SKU ที่ยังไม่มีประวัติพอคำนวณ Priority ด้วย ระบุวันที่คาดว่าจะเติมสต็อกได้ที่นี่เพื่อแจ้งทีม (บันทึกไว้ใน Export Focus List)</p>' +
+        '<div class="table-scroll" style="max-height:320px; overflow-y:auto;"><table><thead><tr>' +
+        '<th>Product Code</th><th>Product Name</th><th>SKU</th>' +
+        '<th>Priority</th><th>วันที่คาดว่าจะเติมสต็อก</th><th>สถานะ</th></tr></thead><tbody>' +
+        stockedOutRows.map(function(r){
+          const pm = PRIORITY_META[r.priority] || {label:r.priority, cls:'muted'};
+          const st = restockEtaStatus(r.sku);
+          return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
+            '<td class="strong truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
+            '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
+            '<td><span class="badge '+pm.cls+'">'+pm.label+'</span></td>'+
+            '<td><input type="date" class="restock-eta-input" data-sku="'+escapeHtml(r.sku)+'" value="'+escapeHtml(restockEta.get(r.sku)||'')+'"></td>'+
+            '<td><span class="badge '+st.cls+'">'+st.label+'</span></td></tr>';
+        }).join('') +
+        '</tbody></table></div></div>';
+    }
+    el.innerHTML = html;
+    Array.from(el.querySelectorAll('.link-cell')).forEach(function(td){
+      td.addEventListener('click', function(){ openProductModal(td.getAttribute('data-sku')); });
+    });
+    Array.from(el.querySelectorAll('.restock-eta-input')).forEach(function(input){
+      input.addEventListener('change', function(){
+        const sku = input.getAttribute('data-sku');
+        if (input.value) restockEta.set(sku, input.value); else restockEta.delete(sku);
+        renderCriticalActionPanels();
+      });
+    });
   }
 
   /* ------------------------------ TODAY'S TABLE ------------------------------ */
@@ -1658,6 +1860,8 @@
         '<td>'+(tm?'<span class="badge '+tm.cls+'">'+tm.label+'</span>':'—')+'</td>'+
         '<td class="num">'+fmtInt(r.suggestedQty)+'</td>'+
         '<td class="num strong">'+fmtInt(r.finalQty)+'</td>'+
+        '<td class="num'+(r.salesAtRisk>0?' rec-text critical':'')+'">'+fmtCurrency(r.salesAtRisk)+'</td>'+
+        '<td'+(r.mustOrderNow?' class="rec-text critical"':'')+'>'+(r.orderByDate?(r.mustOrderNow?'สั่งวันนี้':fmtDate(r.orderByDate)):'—')+'</td>'+
         '<td><span class="rec-text '+recommendationClass(r)+'">'+escapeHtml(r.recommendation)+'</span></td>'+
         '</tr>';
     }).join('');
@@ -1684,6 +1888,7 @@
         '<td class="num">'+fmtInt(f.criticalCount)+'</td>'+
         '<td class="num">'+fmtInt(f.suggestedSum)+'</td>'+
         '<td class="num">'+fmtInt(f.birdAvailable)+'</td>'+
+        '<td class="num'+(f.salesAtRiskSum>0?' rec-text critical':'')+'">'+fmtCurrency(f.salesAtRiskSum)+'</td>'+
         '<td class="num">'+(f.avgDaysLeft!==null?fmtNum1(f.avgDaysLeft):'N/A')+'</td></tr>';
     }).join('');
     Array.from(document.getElementById('familyTbody').querySelectorAll('.link-cell')).forEach(function(td){
@@ -1712,28 +1917,33 @@
     const needReplenish = rows.filter(r=>r.finalQty!==null && r.finalQty>0).length;
     const totalSuggested = rows.reduce((s,r)=> s + (r.suggestedQty||0), 0);
     const totalFinal = rows.reduce((s,r)=> s + (r.finalQty||0), 0);
+    const salesAtRiskRows = rows.filter(r=>r.salesAtRisk!==null);
+    const totalSalesAtRisk = salesAtRiskRows.reduce((s,r)=> s + r.salesAtRisk, 0);
+    const missingPriceCount = rows.filter(r=>r.suggestedQty>0 && r.salesAtRisk===null).length;
     document.getElementById('tilesReplenish').innerHTML = [
       { lbl:'SKU Need Replenishment', val: fmtInt(needReplenish), accent:'warning' },
       { lbl:'Total Suggested Qty', val: fmtInt(totalSuggested), accent:'' },
       { lbl:'Total Final Qty', val: fmtInt(totalFinal), accent:'violet' },
-    ].map(tileHtml).join('');
+      { lbl:'Total Sales at Risk (฿)' + (missingPriceCount>0 ? ' *' : ''), val: fmtCurrency(totalSalesAtRisk), accent:'critical' },
+    ].map(tileHtml).join('') + (missingPriceCount>0 ?
+      '<div class="dz-meta" style="margin-top:8px;">* ไม่รวม '+fmtInt(missingPriceCount)+' SKU ที่ต้องเติมสต็อกแต่ไม่มีข้อมูลราคาขายจาก Bird — ดูที่ Data Quality</div>' : '');
 
     const critical = rows.filter(r=>r.priority==='P0').length;
     const urgent = rows.filter(r=>r.priority==='P1').length;
     const under7 = rows.filter(r=>r.daysLeft!==null && r.daysLeft<=7).length;
+    const mixedSizeRiskCount = Array.from(productSizeRisk.values()).filter(v=>v.isMixed).length;
     document.getElementById('tilesRisk').innerHTML = [
       { lbl:'Critical SKU (P0)', val: fmtInt(critical), accent:'critical' },
       { lbl:'Urgent SKU (P1)', val: fmtInt(urgent), accent:'warning' },
       { lbl:'SKU < 7 Days Cover', val: fmtInt(under7), accent:'warning' },
+      { lbl:'Products w/ Uneven Size Risk', val: fmtInt(mixedSizeRiskCount), accent:'warning' },
     ].map(tileHtml).join('');
 
     const insufficient = rows.filter(r=>r.shortage>0).length;
-    const notFound = rows.filter(r=>r.birdStatus==='NOT_FOUND').length;
     const nonlIssue = rows.filter(r=>r.birdStatus==='NONL').length;
     const noffOnly = rows.filter(r=>r.birdStatus==='NOFF').length;
     document.getElementById('tilesWarehouse').innerHTML = [
       { lbl:'Bird Stock Insufficient', val: fmtInt(insufficient), accent:'warning' },
-      { lbl:'Bird SKU Not Found', val: fmtInt(notFound), accent:'critical' },
       { lbl:'NONL Data Issue (SKU)', val: fmtInt(nonlIssue), accent:'warning' },
       { lbl:'NOFF Only, No Online (SKU)', val: fmtInt(noffOnly), accent:'warning' },
     ].map(tileHtml).join('');
@@ -1816,10 +2026,13 @@
       const rsm = REPLENISH_STATUS_META[r.replenishStatus] || {label:r.replenishStatus, cls:'muted'};
       const birdCell = r.birdStatus==='OK' ? '<span class="strong">'+fmtInt(r.birdStock)+'</span>' :
         birdBadge(r.birdStatus, birdExtraLabel(r));
+      const sizeRisk = r.productCode ? productSizeRisk.get(r.productCode) : null;
+      const sizeRiskBadge = (sizeRisk && sizeRisk.isMixed) ?
+        ' <span class="badge warning" title="สินค้านี้มีบาง Size วิกฤต/เร่งด่วน ขณะที่บาง Size ยังปกติ — คลิกชื่อสินค้าเพื่อดูตารางไซส์">⚠ Size Risk</span>' : '';
       return '<tr>'+
         '<td class="focus-cell">'+focusStarHtml(r.sku)+'</td>'+
         '<td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
-        '<td class="strong truncate" title="'+escapeHtml(cleanProductName(r.productName, r.productCode)||'(ไม่มีชื่อ)')+'">'+escapeHtml(cleanProductName(r.productName, r.productCode)||'(ไม่มีชื่อ)')+'</td>'+
+        '<td class="strong truncate" title="'+escapeHtml(cleanProductName(r.productName, r.productCode)||'(ไม่มีชื่อ)')+'">'+escapeHtml(cleanProductName(r.productName, r.productCode)||'(ไม่มีชื่อ)')+sizeRiskBadge+'</td>'+
         '<td>'+escapeHtml(r.family||'—')+'</td>'+
         '<td>'+escapeHtml(r.subCollection||'—')+'</td>'+
         '<td>'+escapeHtml(r.category||'—')+'</td>'+
@@ -1833,7 +2046,6 @@
         '<td class="num">'+fmtInt(r.birdNoff)+'</td>'+
         '<td class="num">'+fmtInt(r.birdTotal)+'</td>'+
         '<td class="num">'+birdCell+'</td>'+
-        '<td><span class="badge '+(r.birdMatchStatus==='MATCHED'?'good':'critical')+'">'+r.birdMatchStatus+'</span></td>'+
         '<td>'+birdBadge(r.birdStatus)+'</td>'+
         '<td class="num'+(r.isDupSellerSku?'':(r.dailyChange!==null && r.dailyChange<0?' rec-text critical':(r.dailyChange!==null && r.dailyChange>0?' rec-text':'')))+'" title="'+(r.isDupSellerSku?'SKU นี้ปรากฏซ้ำในไฟล์ TikTok — งดคำนวณเพื่อไม่ให้ค่าคลาดเคลื่อน':'')+'">'+(r.isDupSellerSku?'⚠':(r.dailyChange!==null?fmtInt(r.dailyChange):'—'))+'</td>'+
         '<td>'+(r.isDupSellerSku?'<span class="badge warning" title="SKU ผู้ขายซ้ำกันในไฟล์ TikTok วันนี้ — ระบบไม่แน่ใจว่าประวัติ Snapshot เป็นของแถวไหน จึงงดคำนวณ Trend/Usage/Suggested Qty จนกว่าจะแก้ไขไฟล์ต้นทาง">Duplicate SKU</span>':(tm?'<span class="badge '+tm.cls+'">'+tm.label+'</span>':'<span class="badge muted">'+(r.insufficientHistory?'Insufficient History':'—')+'</span>'))+'</td>'+
@@ -1841,6 +2053,7 @@
         '<td class="num">'+(r.daysLeft!==null?fmtNum1(r.daysLeft):'N/A')+'</td>'+
         '<td class="num">'+fmtInt(r.suggestedQty)+'</td>'+
         '<td class="num">'+fmtInt(r.finalQty)+'</td>'+
+        '<td class="num'+(r.salesAtRisk>0?' rec-text critical':'')+'">'+fmtCurrency(r.salesAtRisk)+'</td>'+
         '<td><span class="badge '+rsm.cls+'">'+rsm.label+'</span></td>'+
         '<td><span class="badge '+pm.cls+'">'+pm.label+'</span></td>'+
         '</tr>';
@@ -1858,13 +2071,23 @@
   }
 
   /* ------------------------------ PRODUCT MODAL ------------------------------ */
+  // Size-level risk: a product's TOTAL stock across sizes can look healthy while its
+  // best-selling size is critical and a slow size is sitting full — flag that split here
+  // instead of only surfacing it if someone happens to open the product modal.
+  function computeSizeRisk(variants){
+    const distinctSizes = new Set(variants.map(v=>v.size).filter(Boolean));
+    if (distinctSizes.size < 2) return { isMixed:false, criticalCount:0, healthyCount:0 };
+    const criticalCount = variants.filter(v=> v.priority==='P0' || v.priority==='P1').length;
+    const healthyCount = variants.filter(v=> v.priority==='P3' || v.priority==='P4').length;
+    return { isMixed: criticalCount>0 && healthyCount>0, criticalCount, healthyCount };
+  }
   function openProductModal(sku){
     const r = rows.find(x=>x.sku===sku);
     if (!r) return;
     const pm = PRIORITY_META[r.priority] || {label:r.priority};
     const tm = r.trend ? (TREND_META[r.trend]||{label:r.trend}) : null;
     document.getElementById('pmTitle').textContent = cleanProductName(r.productName, r.productCode) || '(ไม่มีชื่อ)';
-    document.getElementById('pmSub').textContent = 'Product Code: ' + (r.productCode||'—') + ' · SKU: ' + displaySku(r) + ' · Family: ' + (r.family||'—');
+    const pmSubBase = 'Product Code: ' + (r.productCode||'—') + ' · SKU: ' + displaySku(r) + ' · Family: ' + (r.family||'—');
     document.getElementById('pmMeta').innerHTML = [
       ['TikTok Stock', fmtInt(r.tiktokStock)],
       ['Bird Available', r.birdStatus==='OK'?fmtInt(r.birdStock):birdBadge(r.birdStatus, birdExtraLabel(r))],
@@ -1873,10 +2096,15 @@
       ['Trend', tm?tm.label:(r.insufficientHistory?'Insufficient History':'—')],
       ['Suggested Qty', fmtInt(r.suggestedQty)],
       ['Final Qty', fmtInt(r.finalQty)],
+      ['Sales at Risk', fmtCurrency(r.salesAtRisk)],
+      ['Order By', r.orderByDate?(r.mustOrderNow?'สั่งวันนี้':fmtDate(r.orderByDate)):'—'],
       ['Priority', pm.label],
     ].map(function(kv){ return '<div class="mi"><div class="k">'+kv[0]+'</div><div class="v">'+kv[1]+'</div></div>'; }).join('');
 
     const variants = r.productCode ? rows.filter(x=>x.productCode===r.productCode) : [r];
+    const sizeRisk = computeSizeRisk(variants);
+    document.getElementById('pmSub').innerHTML = escapeHtml(pmSubBase) + (sizeRisk.isMixed ?
+      ' <span class="badge warning" style="margin-left:6px;" title="สินค้านี้มีบาง Size วิกฤต/เร่งด่วน ขณะที่บาง Size ยังปกติ — ดูตารางไซส์ด้านล่างก่อนตัดสินใจเบิกตามยอดรวม">⚠ Mixed Size Risk</span>' : '');
     document.getElementById('pmVariants').innerHTML = variants.map(function(v){
       const vpm = PRIORITY_META[v.priority] || {label:v.priority, cls:'muted'};
       const vtm = v.trend ? (TREND_META[v.trend]||{label:v.trend,cls:'muted'}) : null;
@@ -1896,7 +2124,7 @@
   /* ------------------------------ COMPARE TIKTOK VS BIRD GAP ------------------- */
   // Two-way stock comparison: any SKU where |Bird - TikTok| >= GAP_THRESHOLD, in EITHER
   // direction (not just Bird-surplus). Only rows with a clean numeric Bird stock
-  // (birdStatus === 'OK') qualify, since NOT_FOUND/BLANK/NOFF/NEGATIVE rows have no
+  // (birdStatus === 'OK') qualify, since BLANK/NOFF/NEGATIVE rows have no
   // trustworthy Bird quantity to compare against.
   const GAP_THRESHOLD = 10;
   function gapOf(r){ return r.birdStock - r.tiktokStock; }               // signed: Stock Gap
@@ -2050,24 +2278,25 @@
   }
   function exportCsv(){
     const cols = ['Product Code','Product Name','Family','SubCollection','Category','Color','Size','SKU',
-      'TikTok Stock','TikTok Locked','TikTok Total','Bird NONL','Bird NOFF','Bird Total','Bird Available','Bird Match','Bird Status','Bird Offline Stock',
-      'Daily Stock Change','Stock Status','Trend','Est Daily Usage','Est Days Left','Suggested Qty','Final Qty','Replenishment Status','Priority'];
+      'TikTok Stock','TikTok Locked','TikTok Total','Bird NONL','Bird NOFF','Bird Total','Bird Available','Bird Status','Bird Offline Stock',
+      'Daily Stock Change','Stock Status','Trend','Est Daily Usage','Est Days Left','Suggested Qty','Final Qty','Sales at Risk','Replenishment Status','Priority'];
     const list = sortRows(getFiltered());
     const csv = toCsv(cols, list, function(r){
       return [r.productCode, cleanProductName(r.productName,r.productCode), r.family, r.subCollection, r.category, r.color, r.size, displaySku(r), r.tiktokStock,
         r.tiktokLocked, r.tiktokTotal, r.birdNonl, r.birdNoff, r.birdTotal,
-        r.birdStatus==='OK'?r.birdStock:r.birdStatus, r.birdMatchStatus, r.birdStatus, r.birdOfflineQty!==null?r.birdOfflineQty:'',
+        r.birdStatus==='OK'?r.birdStock:r.birdStatus, r.birdStatus, r.birdOfflineQty!==null?r.birdOfflineQty:'',
         r.dailyChange!==null?r.dailyChange:'', specStockStatus(r), r.trend||'', r.usage!==null?r.usage.toFixed(2):'',
-        r.daysLeft!==null?r.daysLeft.toFixed(2):'', r.suggestedQty, r.finalQty, r.replenishStatus, r.priority];
+        r.daysLeft!==null?r.daysLeft.toFixed(2):'', r.suggestedQty, r.finalQty, r.salesAtRisk!==null?Math.round(r.salesAtRisk):'', r.replenishStatus, r.priority];
     });
     downloadCsv(csv, 'tiktok_replenishment_full.csv');
   }
   function exportTodayCsv(){
-    const cols = ['Priority','Product Code','Product Name','Family','TikTok Stock','Bird Available','Days Left','Trend','Suggested Qty','Final Qty','Recommendation'];
+    const cols = ['Priority','Product Code','Product Name','Family','TikTok Stock','Bird Available','Days Left','Trend','Suggested Qty','Final Qty','Sales at Risk','Order By','Recommendation'];
     const list = sortByPriorityThenDays(getTodayFiltered());
     const csv = toCsv(cols, list, function(r){
       return [r.priority, r.productCode, cleanProductName(r.productName,r.productCode), r.family, r.tiktokStock,
-        r.birdStatus==='OK'?r.birdStock:r.birdStatus, r.daysLeft!==null?r.daysLeft.toFixed(2):'', r.trend||'', r.suggestedQty, r.finalQty, r.recommendation];
+        r.birdStatus==='OK'?r.birdStock:r.birdStatus, r.daysLeft!==null?r.daysLeft.toFixed(2):'', r.trend||'', r.suggestedQty, r.finalQty,
+        r.salesAtRisk!==null?Math.round(r.salesAtRisk):'', r.orderByDate?fmtDate(r.orderByDate):'', r.recommendation];
     });
     downloadCsv(csv, 'todays_replenishment.csv');
   }
@@ -2085,15 +2314,19 @@
   /* -------------------------------- NOTES ------------------------------------ */
   function renderNotes(){
     const html = [
-      '<p><b>ขอบเขตข้อมูล:</b> ระบบนี้ใช้ TikTok Seller Center เป็น Master Dataset — วิเคราะห์เฉพาะ SKU ที่มีอยู่ใน TikKok เท่านั้น Bird Warehouse ใช้เป็นแหล่ง Lookup สำหรับดูว่ามีของให้เบิกเท่าไหร่ SKU ที่มีใน Bird แต่ไม่ได้ขายบน TikTok จะไม่ถูกนำมาแสดงหรือวิเคราะห์เลย</p>',
-      '<p><b>TikTok SKU ที่หาไม่เจอใน Bird:</b> จะยังคงแสดงอยู่ในระบบเสมอ พร้อมสถานะ "NOT FOUND IN BIRD" — จะไม่ถูกเปลี่ยนเป็น Bird Stock = 0 เพราะ 0 กับหา SKU ไม่เจอมีความหมายต่างกันโดยสิ้นเชิง</p>',
+      '<p><b>ขอบเขตข้อมูล:</b> ระบบนี้ใช้ TikTok Seller Center เป็น Master Dataset — วิเคราะห์เฉพาะ SKU ที่มีอยู่ใน TikTok <b>และ</b> แมตช์เจอใน Bird เท่านั้น SKU ที่มีใน Bird แต่ไม่ได้ขายบน TikTok จะไม่ถูกนำมาแสดงหรือวิเคราะห์เลย และในทางกลับกัน SKU ที่มีบน TikTok แต่หาไม่เจอใน Bird เลยก็ถูกตัดออกจากการวิเคราะห์เช่นกัน เพราะไม่มีข้อมูลให้เบิกได้' +
+        (baseRows && baseRows.__excludedNotFoundCount>0 ? ' — รอบล่าสุดตัดออกไป ' + fmtInt(baseRows.__excludedNotFoundCount) + ' SKU' : '') + '</p>',
       '<p><b>NONL / NOFF:</b> ในไฟล์ Bird คอลัมน์ NONL = จำนวนสต็อกออนไลน์ (ใช้เป็น Bird Available หลัก) และ NOFF = จำนวนสต็อกออฟไลน์/หน้าร้าน — ทั้งสองเป็นตัวเลขจริง ถ้า NONL เป็น 0 หรือว่างเปล่าแต่ NOFF มีของอยู่ ระบบจะขึ้นสถานะ "NOFF" หมายถึงของมีจริงแต่จัดสรรให้ออฟไลน์ ยังเบิกให้ TikTok ไม่ได้ทันที ส่วนค่าติดลบหรือค่าที่อ่านไม่ได้จาก Bird จะไม่ถูกนำมาคำนวณเป็น Stock = 0 หรือใช้วางแผนเบิกเด็ดขาด — ระบบจะขึ้นสถานะที่เกี่ยวข้องและแนะนำให้ตรวจสอบ Bird ก่อนเบิกเสมอ</p>',
       '<p><b>Estimated Daily Usage:</b> ประมาณจากอัตราการ<b>ลดลง</b>ของ TikTok Stock ระหว่าง Snapshot เท่านั้น (ไม่ใช่ยอดขายจริง เพราะอาจเกิดจาก Adjustment, Cancellation หรือแก้ไข Stock ได้) วันที่ Stock เพิ่มขึ้นจะถูกจัดเป็น "REPLENISHMENT EVENT" และไม่ถูกนำมาคำนวณ Usage เฉลี่ย</p>',
       '<p><b>Snapshot History:</b> บันทึกทุกครั้งที่วิเคราะห์ โดยไม่เขียนทับวันก่อนหน้า ใช้ข้อมูลย้อนหลังสูงสุด ' + CONFIG.rollingWindowSnapshots + ' Snapshot ล่าสุดในการคำนวณ Usage/Trend หากมีประวัติน้อยกว่า 2 วัน จะแสดง "Insufficient History" — เนื่องจากหน้านี้ไม่บันทึกข้อมูลถาวร ให้ Export Snapshot เก็บไว้แล้ว Import กลับมาในครั้งถัดไปเพื่อดูแนวโน้มข้ามวัน</p>',
-      '<p><b>Suggested / Final Replenishment:</b> Target Stock = Estimated Daily Usage × (Target Cover + Safety Days) ปัจจุบันตั้งไว้ ' + CONFIG.targetCoverDays + ' + ' + CONFIG.safetyDays + ' วัน · Suggested Qty = MAX(Target Stock − TikTok Stock, 0) · Final Qty = MIN(Suggested Qty, Bird Available) — ถ้า Bird มีไม่พอจะขึ้นสถานะ "Warehouse Stock Insufficient" พร้อมจำนวนที่ขาด</p>',
-      '<p><b>Priority:</b> P0 ≤ ' + CONFIG.p0Days + ' วัน, P1 ≤ ' + CONFIG.p1Days + ' วัน, P2 ≤ ' + CONFIG.reorderTriggerDays + ' วัน (Reorder Trigger), P3 ≤ ' + CONFIG.targetCoverDays + ' วัน (Target Cover), P4 มากกว่านั้น — SKU ที่ Bird มีปัญหาข้อมูลจะถูกจัดเป็น "Data Issue" เสมอ ไม่ว่า Days Left จะเท่าไหร่ เพราะเบิกจริงไม่ได้จนกว่าจะตรวจสอบ Bird ก่อน</p>',
+      '<p><b>Suggested / Final Replenishment:</b> Target Stock = Effective Daily Usage × (Target Cover + Safety Days) ปัจจุบันตั้งไว้ ' + CONFIG.targetCoverDays + ' + ' + CONFIG.safetyDays + ' วัน · Suggested Qty = MAX(Target Stock − TikTok Stock, 0) · Final Qty = MIN(Suggested Qty, Bird Available) — ถ้า Bird มีไม่พอจะขึ้นสถานะ "Warehouse Stock Insufficient" พร้อมจำนวนที่ขาด · Effective Daily Usage = Est. Daily Usage × Campaign Multiplier (ปกติคือ ×1 เท่ากับ Est. Daily Usage เดิม)</p>',
+      '<p><b>Priority:</b> P0 ≤ ' + CONFIG.p0Days + ' วัน, P1 ≤ ' + CONFIG.p1Days + ' วัน, P2 ≤ ' + reorderTriggerDays() + ' วัน (= Lead Time ' + CONFIG.leadTimeDays + ' + Safety ' + CONFIG.safetyDays + ' วัน, Reorder Trigger), P3 ≤ ' + CONFIG.targetCoverDays + ' วัน (Target Cover), P4 มากกว่านั้น — SKU ที่ Bird มีปัญหาข้อมูลจะถูกจัดเป็น "Data Issue" เสมอ ไม่ว่า Days Left จะเท่าไหร่ เพราะเบิกจริงไม่ได้จนกว่าจะตรวจสอบ Bird ก่อน</p>',
+      '<p><b>Lead Time / Order By:</b> ยังไม่มีข้อมูล Lead Time จริงต่อ SKU หรือ Supplier ในไฟล์ต้นทาง จึงใช้ค่าเดียวที่ปรับได้ (ปัจจุบัน ' + CONFIG.leadTimeDays + ' วัน) แทนทั้งระบบ — Order By Date = วันนี้ + (Days Left − Lead Time) คือวันล่าสุดที่ควรสั่ง/เบิกเพื่อไม่ให้ของขาดก่อนของใหม่มาถึง ถ้า Days Left ≤ Lead Time ระบบจะขึ้น "สั่งวันนี้"</p>',
+      '<p><b>Campaign / LIVE Multiplier:</b> ตัวคูณคาดการณ์ยอดขายที่ปรับเองได้ (ปัจจุบัน ×' + campaignMultiplier + ') ใช้กับ Days Left / Suggested Qty / Sales at Risk เท่านั้น — ตัวเลข Est. Daily Usage ที่แสดงในตารางยังคงเป็นค่าที่วัดจริงจาก Stock ที่ลดลง ไม่ถูกคูณ ปรับตัวเลขนี้ขึ้นก่อนวัน Campaign/LIVE ที่คาดว่ายอดขายจะพุ่ง แล้วปรับกลับเป็น 1 หลังจบแคมเปญ</p>',
+      '<p><b>Sales at Risk:</b> = Suggested Qty × ราคาขาย (Current Selling Price จาก Bird ถ้าไม่มีจะใช้ Original Price แทน) — คือโอกาสเสียยอดขายเป็นบาทถ้าไม่เติมสต็อก SKU นั้น SKU ที่ไม่มีราคาขายในไฟล์ Bird เลยจะไม่ถูกนับรวม (ไม่ใช่ 0) และจะถูกตั้งเป็น "Missing Price Data" ใน Data Quality แทน</p>',
       '<p><b>Family:</b> อ้างอิงจากข้อมูลจริงใน Bird Product Master (Brand Family) เท่านั้น หากไม่พบจะแสดง "UNMAPPED"</p>',
-      '<p><b>Focus Watchlist:</b> คลิก ⭐ ที่ SKU ที่คุณติดตามเป็นพิเศษ ระบบจะแจ้งเตือนในการ์ด Focus Watchlist ทันทีที่คุณอัปโหลดไฟล์และวิเคราะห์ใหม่ — แต่เนื่องจากไฟล์นี้เป็นเว็บที่รันในเบราว์เซอร์ล้วนๆ ไม่มีเซิร์ฟเวอร์เบื้องหลัง จึงส่ง Push/LINE/อีเมลแจ้งเตือนตอนที่คุณไม่ได้เปิดไฟล์อยู่ไม่ได้ — ใช้ปุ่ม Export/Import Focus List (.json) เพื่อเก็บรายการนี้ไว้ใช้ครั้งถัดไป หรือส่งให้ Claude ช่วยตรวจสอบแทนตามรอบที่ตั้งไว้</p>',
+      '<p><b>Size-level Risk:</b> สินค้าที่มีบาง Size อยู่ระดับ Critical/Urgent (P0/P1) ขณะที่บาง Size ยังปกติ (P3/P4) จะขึ้นป้าย "⚠ Size Risk" ที่ตาราง Full Inventory และหน้ารายละเอียดสินค้า — สต็อกรวมของสินค้าที่ดูปกติ อาจซ่อน Size ที่ขายดีแต่ของหมดอยู่ก็ได้</p>',
+      '<p><b>Focus Watchlist / Restock ETA:</b> คลิก ⭐ ที่ SKU ที่คุณติดตามเป็นพิเศษ ระบบจะแจ้งเตือนในการ์ด Focus Watchlist ทันทีที่คุณอัปโหลดไฟล์และวิเคราะห์ใหม่ ส่วนวันที่คาดว่าจะเติมสต็อกที่กรอกไว้ในการ์ด "สินค้าหมดสต็อกทุกช่องทาง" ก็เก็บไว้ในลักษณะเดียวกัน — แต่เนื่องจากไฟล์นี้เป็นเว็บที่รันในเบราว์เซอร์ล้วนๆ ไม่มีเซิร์ฟเวอร์เบื้องหลัง จึงส่ง Push/LINE/อีเมลแจ้งเตือนตอนที่คุณไม่ได้เปิดไฟล์อยู่ไม่ได้ — ใช้ปุ่ม Export/Import Focus List & Restock ETA (.json) เพื่อเก็บทั้งสองอย่างไว้ใช้ครั้งถัดไป หรือส่งให้ Claude ช่วยตรวจสอบแทนตามรอบที่ตั้งไว้</p>',
       (ttMap && ttMap.__stats && ttMap.__stats.dupSkuCount > 0 ?
         '<p><b>⚠ ข้อควรระวังคุณภาพข้อมูล:</b> พบแถวที่ SKU ผู้ขายซ้ำกันในไฟล์ TikTok ประมาณ ' + fmtInt(ttMap.__stats.dupSkuCount) + ' แถว (นับรวม Base SKU ที่ชนกันจากหลายไซส์/สี) — Snapshot History จะบันทึกตาม Seller SKU ที่แน่นอน หากมี Seller SKU ซ้ำกันเป๊ะ ระบบจะเก็บแค่ค่าล่าสุดต่อวันนั้น แนะนำให้ตรวจสอบไฟล์ต้นทางจาก TikTok Seller Center</p>' : ''),
     ].join('');
@@ -2163,10 +2396,30 @@
     function(file, meta){ birdFile = file; birdMeta = meta; checkReady(); runFullPipeline(); },
     function(){ birdFile = null; birdMeta = null; checkReady(); });
 
-  // Target Cover / Safety Days / Reorder Trigger are now fixed constants (see CONFIG above) —
-  // the on-page inputs for these were removed since they weren't being used; CONFIG keeps its
-  // default values (14 / 3 / 7) for all Priority (P2/P3) and Suggested Qty calculations.
-  function readConfigInputs(){}
+  // Target Cover / Safety Days are fixed constants (see CONFIG above) — the on-page inputs for
+  // those were removed since they weren't being used. Lead Time and Campaign Multiplier ARE
+  // user-editable (see inputs below); re-read them here as a safety net in case the user typed
+  // a value and clicked Analyze before the input's 'change' event fired (i.e. without blurring).
+  function applyLeadTimeInput(){
+    const v = parseFloat(document.getElementById('leadTimeInput').value);
+    CONFIG.leadTimeDays = (isFinite(v) && v>=0) ? v : CONFIG.leadTimeDays;
+  }
+  function applyCampaignMultiplierInput(){
+    const v = parseFloat(document.getElementById('campaignMultiplierInput').value);
+    campaignMultiplier = (isFinite(v) && v>0) ? v : 1;
+  }
+  function readConfigInputs(){
+    applyLeadTimeInput();
+    applyCampaignMultiplierInput();
+  }
+  document.getElementById('leadTimeInput').addEventListener('change', function(){
+    applyLeadTimeInput();
+    if (rows.length){ recomputeRows(); renderAll(); renderNotes(); }
+  });
+  document.getElementById('campaignMultiplierInput').addEventListener('change', function(){
+    applyCampaignMultiplierInput();
+    if (rows.length){ recomputeRows(); renderAll(); renderNotes(); }
+  });
 
   function runFullPipeline(){
     if (!ttFile || !birdFile) return;
@@ -2249,9 +2502,9 @@
     const reader = new FileReader();
     reader.onload = function(e){
       try {
-        const arr = JSON.parse(e.target.result);
-        const added = mergeImportedFocusList(arr);
-        if (rows.length){ renderFocus(); renderTodayTable(); renderMainTable(); }
+        const payload = JSON.parse(e.target.result);
+        const added = mergeImportedFocusList(payload);
+        if (rows.length){ renderFocus(); renderCriticalActionPanels(); renderTodayTable(); renderMainTable(); }
         setStatus('โหลด Focus List สำเร็จ — เพิ่ม ' + fmtInt(added) + ' SKU', 'ok');
       } catch(err){
         setStatus('โหลดไฟล์ Focus List ไม่สำเร็จ: ไฟล์ไม่ถูกต้อง', 'err');
