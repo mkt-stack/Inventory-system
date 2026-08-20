@@ -365,7 +365,9 @@
               <th class="num" data-key="birdNonl" title="Bird NONL — สต็อกออนไลน์ดิบจากไฟล์ Bird (ก่อนตีความสถานะ)">NONL</th>
               <th class="num" data-key="birdNoff" title="Bird NOFF — สต็อกออฟไลน์/หน้าร้านดิบจากไฟล์ Bird">NOFF</th>
               <th class="num" data-key="daysLeft">Days Left</th>
+              <th class="num" data-key="usage" title="Estimated Daily Usage — ประมาณจากการลดลงของ TikTok Stock ไม่ใช่ยอดขายจริง">Est. Usage/Day</th>
               <th data-key="trend">Trend</th>
+              <th data-key="historyQtyText" title="จำนวนสต็อก TikTok ที่บันทึกไว้แต่ละวันในช่วงที่ติดตาม (เก่า→ใหม่) — ชี้เมาส์เพื่อดูวันที่ของแต่ละค่า">ปริมาณย้อนหลัง 30 วัน</th>
               <th class="num" data-key="suggestedQty">Suggested</th>
               <th class="num" data-key="finalQty">Final</th>
               <th class="num" data-key="salesAtRisk" title="Suggested Qty × ราคาขาย — โอกาสเสียยอดขายถ้าไม่เติมสต็อก SKU นี้">Sales at Risk (฿)</th>
@@ -1431,12 +1433,20 @@
     const estLostQty = stockoutDays===0 ? 0 : (usageInfo.usage!==null ? stockoutDays*usageInfo.usage : null);
     const estLostValue = (estLostQty!==null && base.sellingPrice!==null) ? estLostQty*base.sellingPrice : null;
 
+    // Raw TikTok Stock quantity recorded each day in the tracked window, oldest -> newest —
+    // lets a Leader eyeball the actual numbers behind Est. Daily Usage/Trend instead of
+    // trusting the derived figures blindly. Shown truncated inline; full detail in a tooltip.
+    const historyQtyText = windowHistory.map(function(h){ return fmtInt(h.stock); }).join(' → ');
+    const historyQtyTooltip = windowHistory.length ?
+      windowHistory.map(function(h){ return h.date+': '+fmtInt(h.stock); }).join('\n') :
+      'ยังไม่มีประวัติ Snapshot';
+
     const row = Object.assign({}, base, {
       usage: usageInfo.usage, effectiveUsage, insufficientHistory: usageInfo.insufficientHistory,
       trend: usageInfo.trend, lastEventType: usageInfo.lastEventType,
       daysLeft, priority, targetStock, suggestedQty, finalQty, shortage, replenishStatus,
       dailyChange, isDupSellerSku, salesAtRisk, mustOrderNow, orderByDate,
-      stockoutDays, trackedDays, estLostQty, estLostValue,
+      stockoutDays, trackedDays, estLostQty, estLostValue, historyQtyText, historyQtyTooltip,
       snapshotCount: history.length,
     });
     row.recommendation = buildRecommendation(row);
@@ -2110,7 +2120,9 @@
         '<td class="num">'+fmtInt(r.birdNonl)+'</td>'+
         '<td class="num">'+fmtInt(r.birdNoff)+'</td>'+
         '<td class="num">'+(r.daysLeft!==null?fmtNum1(r.daysLeft):'N/A')+'</td>'+
+        '<td class="num">'+(r.usage!==null?fmtNum1(r.usage):'—')+'</td>'+
         '<td>'+(tm?'<span class="badge '+tm.cls+'">'+tm.label+'</span>':'—')+'</td>'+
+        '<td class="mono truncate" style="max-width:180px;" title="'+escapeHtml(r.historyQtyTooltip)+'">'+escapeHtml(r.historyQtyText||'—')+'</td>'+
         '<td class="num">'+fmtInt(r.suggestedQty)+'</td>'+
         '<td class="num strong">'+fmtInt(r.finalQty)+'</td>'+
         '<td class="num'+(r.salesAtRisk>0?' rec-text critical':'')+'">'+fmtCurrency(r.salesAtRisk)+'</td>'+
@@ -2562,11 +2574,12 @@
     downloadCsv(csv, 'tiktok_replenishment_full.csv');
   }
   function exportTodayCsv(){
-    const cols = ['Priority','Product Code','Product Name','Family','TikTok Stock','Bird Available','Bird NONL','Bird NOFF','Days Left','Trend','Suggested Qty','Final Qty','Sales at Risk','Order By','Recommendation'];
+    const cols = ['Priority','Product Code','Product Name','Family','TikTok Stock','Bird Available','Bird NONL','Bird NOFF','Days Left','Est Daily Usage','Trend','Qty History (Last 30d)','Suggested Qty','Final Qty','Sales at Risk','Order By','Recommendation'];
     const list = sortByPriorityThenDays(getTodayFiltered());
     const csv = toCsv(cols, list, function(r){
       return [r.priority, r.productCode, cleanProductName(r.productName,r.productCode), r.family, r.tiktokStock,
-        r.birdStatus==='OK'?r.birdStock:r.birdStatus, r.birdNonl, r.birdNoff, r.daysLeft!==null?r.daysLeft.toFixed(2):'', r.trend||'', r.suggestedQty, r.finalQty,
+        r.birdStatus==='OK'?r.birdStock:r.birdStatus, r.birdNonl, r.birdNoff, r.daysLeft!==null?r.daysLeft.toFixed(2):'',
+        r.usage!==null?r.usage.toFixed(2):'', r.trend||'', r.historyQtyText||'', r.suggestedQty, r.finalQty,
         r.salesAtRisk!==null?Math.round(r.salesAtRisk):'', r.orderByDate?fmtDate(r.orderByDate):'', r.recommendation];
     });
     downloadCsv(csv, 'todays_replenishment.csv');
