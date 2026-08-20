@@ -390,7 +390,7 @@
               <th class="num" data-key="daysLeft">Days Left</th>
               <th class="num" data-key="usage" title="ประมาณจากการลดลงของ TikTok Stock เฉลี่ยเท่ากับจำนวนวัน Snapshot ที่มีข้อมูลจริง (ชี้เมาส์ที่ค่าในแต่ละแถวเพื่อดูว่าคิดจากกี่วัน) — ไม่ใช่ยอดขายจริง">Average/Day</th>
               <th data-key="trend">Trend</th>
-              <th data-key="historyQtyText" title="จำนวนสต็อก TikTok ที่บันทึกไว้แต่ละวันในช่วงที่ติดตาม (เก่า→ใหม่ ไม่ซ้ำวันเดิม) — ชี้เมาส์เพื่อดูวันที่ของแต่ละค่า">History</th>
+              <th data-key="historyNetChange" title="ผลต่างสุทธิของสต็อก TikTok จาก Snapshot เก่าสุดถึงใหม่สุดในช่วงที่ติดตาม (เช่น -114 = ลดลง 114) — ชี้เมาส์เพื่อดูค่ารายวันทั้งหมด">History</th>
               <th class="num" data-key="suggestedQty">Suggested</th>
               <th class="num" data-key="finalQty">Final</th>
               <th class="num" data-key="salesAtRisk" title="Suggested Qty × ราคาขาย — โอกาสเสียยอดขายถ้าไม่เติมสต็อก SKU นี้">Sales at Risk (฿)</th>
@@ -770,7 +770,7 @@
               <th class="num">TikTok Stock</th>
               <th class="num">Suggested</th><th class="num">NONL (Online)</th><th class="num">NOFF (Offline)</th>
               <th class="num" title="Estimated Daily Usage เฉลี่ยจากจำนวนวัน Snapshot ที่มีข้อมูลจริง">Average/Day</th>
-              <th title="จำนวนสต็อก TikTok ที่บันทึกไว้แต่ละวันในช่วงที่ติดตาม (เก่า→ใหม่) — ชี้เมาส์เพื่อดูวันที่ของแต่ละค่า">History</th>
+              <th title="ผลต่างสุทธิของสต็อก TikTok จาก Snapshot เก่าสุดถึงใหม่สุดในช่วงที่ติดตาม (เช่น -114 = ลดลง 114) — ชี้เมาส์เพื่อดูค่ารายวันทั้งหมด">History</th>
               <th class="num">Allocate from NOFF</th>
             </tr>
           </thead>
@@ -1474,11 +1474,13 @@
     const estLostQty = stockoutDays===0 ? 0 : (usageInfo.usage!==null ? stockoutDays*usageInfo.usage : null);
     const estLostValue = (estLostQty!==null && base.sellingPrice!==null) ? estLostQty*base.sellingPrice : null;
 
-    // Raw TikTok Stock quantity recorded each day in the tracked window, oldest -> newest —
-    // lets a Leader eyeball the actual numbers behind Est. Daily Usage/Trend instead of
-    // trusting the derived figures blindly. Shown truncated inline; full detail in a tooltip.
-    const historyQtyText = windowHistory.map(function(h){ return fmtInt(h.stock); }).join(' → ');
+    // Net change in TikTok Stock from the oldest tracked Snapshot to the most recent upload —
+    // a single signed number (not the full day-by-day chain) so the column stays scannable;
+    // the full per-day breakdown still lives in the tooltip for anyone who wants to verify it.
+    const historyNetChange = windowHistory.length>=2 ? (windowHistory[windowHistory.length-1].stock - windowHistory[0].stock) : null;
+    const historyQtyText = historyNetChange===null ? '—' : (historyNetChange>0?'+':'') + fmtInt(historyNetChange);
     const historyQtyTooltip = windowHistory.length ?
+      (historyNetChange!==null ? ('สุทธิ ' + (historyNetChange>0?'+':'') + fmtInt(historyNetChange) + ' (' + windowHistory[0].date + ' → ' + windowHistory[windowHistory.length-1].date + ')\n\n' ) : '') +
       windowHistory.map(function(h){ return h.date+': '+fmtInt(h.stock); }).join('\n') :
       'ยังไม่มีประวัติ Snapshot';
 
@@ -1487,7 +1489,7 @@
       trend: usageInfo.trend, lastEventType: usageInfo.lastEventType,
       daysLeft, priority, targetStock, suggestedQty, finalQty, shortage, replenishStatus,
       dailyChange, isDupSellerSku, salesAtRisk, mustOrderNow, orderByDate,
-      stockoutDays, trackedDays, estLostQty, estLostValue, historyQtyText, historyQtyTooltip,
+      stockoutDays, trackedDays, estLostQty, estLostValue, historyQtyText, historyQtyTooltip, historyNetChange,
       snapshotCount: history.length,
     });
     row.recommendation = buildRecommendation(row);
@@ -1930,7 +1932,7 @@
     document.getElementById('noffModalSub').textContent = fmtInt(list.length) + ' SKU';
     document.getElementById('noffModalTbody').innerHTML = list.length ? list.map(function(r){
       return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
-        '<td class="strong truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
+        '<td class="strong truncate" title="'+escapeHtml(cleanProductName(r.productName, r.productCode)||'')+'">'+escapeHtml(cleanProductName(r.productName, r.productCode)||'(ไม่มีชื่อ)')+'</td>'+
         '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
         '<td class="num">'+fmtInt(r.tiktokStock)+'</td>'+
         '<td class="num">'+fmtInt(r.suggestedQty)+'</td>'+
@@ -1947,7 +1949,7 @@
   function openNoffModal(){ renderNoffModalBody(); document.getElementById('noffModalBackdrop').classList.add('open'); }
   function closeNoffModal(){ document.getElementById('noffModalBackdrop').classList.remove('open'); }
   function exportNoffCsv(){
-    const cols = ['Product Code','Product Name','SKU','TikTok Stock','Suggested Qty','NONL (Online)','NOFF (Offline)','Average/Day','Qty History (Last 30d)','Allocate from NOFF'];
+    const cols = ['Product Code','Product Name','SKU','TikTok Stock','Suggested Qty','NONL (Online)','NOFF (Offline)','Average/Day','Net Stock Change (Last 30d)','Allocate from NOFF'];
     const csv = toCsv(cols, getNoffAllocationRows(), function(r){
       return [r.productCode, cleanProductName(r.productName,r.productCode), displaySku(r), r.tiktokStock, r.suggestedQty, r.birdNonl, r.birdNoff,
         r.usage!==null?r.usage.toFixed(2):'', r.historyQtyText||'', r.noffAllocation];
@@ -1972,7 +1974,7 @@
         '<button type="button" class="btn-link" data-remove-manual="'+escapeHtml(r.sku)+'" title="เอาออกจากรายการที่เพิ่มเอง (เพิ่มเองไม่ได้มาจากระบบตรวจจับอัตโนมัติ)" style="padding:2px;">✕</button>' : '';
       return '<tr><td class="focus-cell">'+removeCell+'</td>'+
         '<td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
-        '<td class="strong truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
+        '<td class="strong truncate" title="'+escapeHtml(cleanProductName(r.productName, r.productCode)||'')+'">'+escapeHtml(cleanProductName(r.productName, r.productCode)||'(ไม่มีชื่อ)')+'</td>'+
         '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
         '<td><span class="badge '+pm.cls+'">'+pm.label+'</span></td>'+
         '<td><input type="date" class="restock-eta-input" data-sku="'+escapeHtml(r.sku)+'" value="'+escapeHtml(restockEta.get(r.sku)||'')+'" title="'+escapeHtml(restockEtaStatus(r.sku).label)+'"></td>'+
@@ -2038,7 +2040,7 @@
       '</tr></thead><tbody>' +
       capped.map(function(v){
         return '<tr><td class="mono">'+escapeHtml(v.productCode||'—')+'</td>'+
-          '<td class="truncate" title="'+escapeHtml(v.productName||'')+'">'+escapeHtml(v.productName||'(ไม่มีชื่อ)')+'</td>'+
+          '<td class="truncate" title="'+escapeHtml(cleanProductName(v.productName, v.productCode)||'')+'">'+escapeHtml(cleanProductName(v.productName, v.productCode)||'(ไม่มีชื่อ)')+'</td>'+
           '<td class="mono">'+escapeHtml(displaySku(v))+'</td>'+
           '<td>'+escapeHtml(v.color||'—')+'</td><td>'+escapeHtml(v.size||'—')+'</td>'+
           '<td class="num">'+fmtInt(v.tiktokStock)+'</td>'+
@@ -2164,7 +2166,7 @@
         '<td class="focus-cell">'+focusStarHtml(r.sku)+'</td>'+
         '<td><span class="badge '+pm.cls+'">'+pm.label+'</span></td>'+
         '<td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||r.baseSku)+'</td>'+
-        '<td class="strong truncate" title="'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
+        '<td class="strong truncate" title="'+escapeHtml(cleanProductName(r.productName, r.productCode)||'(ไม่มีชื่อ)')+'">'+escapeHtml(cleanProductName(r.productName, r.productCode)||'(ไม่มีชื่อ)')+'</td>'+
         '<td>'+escapeHtml(r.family||'—')+'</td>'+
         '<td class="num">'+fmtInt(r.tiktokStock)+'</td>'+
         '<td class="num">'+(r.birdStatus==='OK'?fmtInt(r.birdStock):birdBadge(r.birdStatus, birdExtraLabel(r)))+'</td>'+
@@ -2639,7 +2641,7 @@
     downloadCsv(csv, 'tiktok_replenishment_full.csv');
   }
   function exportTodayCsv(){
-    const cols = ['Priority','Product Code','Product Name','Family','TikTok Stock','Bird Available','Bird NONL','Bird NOFF','Days Left','Est Daily Usage','Trend','Qty History (Last 30d)','Suggested Qty','Final Qty','Sales at Risk','Order By','Recommendation'];
+    const cols = ['Priority','Product Code','Product Name','Family','TikTok Stock','Bird Available','Bird NONL','Bird NOFF','Days Left','Est Daily Usage','Trend','Net Stock Change (Last 30d)','Suggested Qty','Final Qty','Sales at Risk','Order By','Recommendation'];
     const list = sortByPriorityThenDays(getTodayFiltered());
     const csv = toCsv(cols, list, function(r){
       return [r.priority, r.productCode, cleanProductName(r.productName,r.productCode), r.family, r.tiktokStock,
