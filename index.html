@@ -300,6 +300,12 @@
   tr.gap-row-critical td { background: color-mix(in srgb, var(--critical) 12%, var(--surface-1)) !important; }
   tr.gap-row-high td { background: color-mix(in srgb, var(--warning) 14%, var(--surface-1)) !important; }
   tr.gap-row-critical:hover td, tr.gap-row-high:hover td { filter: brightness(0.97); }
+
+  .top-info-line { font-size: 12px; color: var(--text-muted); margin: 6px 2px 18px; }
+  .fab-upload {
+    position: fixed; right: 22px; bottom: 22px; z-index: 40;
+    box-shadow: 0 8px 24px rgba(0,0,0,.28);
+  }
 </style>
 </head>
 <body>
@@ -317,15 +323,8 @@
     <button class="theme-toggle" id="themeToggle" type="button">🌓 โหมดมืด</button>
   </div>
 
-  <div class="card">
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;">
-      <div>
-        <h2 class="section-title" style="margin-bottom:4px;">ข้อมูลที่ใช้วิเคราะห์</h2>
-        <p class="section-desc" style="margin:0;" id="uploadSummaryText">ยังไม่ได้โหลดไฟล์ — กดปุ่ม "อัปโหลด / วิเคราะห์ไฟล์" เพื่อเริ่ม</p>
-      </div>
-      <button class="btn btn-primary btn-sm" id="openUploadModalBtn" type="button">📁 อัปโหลด / วิเคราะห์ไฟล์</button>
-    </div>
-    <div class="config-row" style="margin-top:14px;">
+  <div class="card" style="padding:14px 24px;">
+    <div class="config-row" style="margin-top:0;">
       <div class="config-field">
         <label for="leadTimeInput" title="ใช้กำหนดจุด Reorder (P2) และวันที่ควรสั่ง (Order By) — ยังไม่มีข้อมูล Lead Time จริงต่อ SKU/Supplier จึงเป็นค่าเดียวที่ปรับได้">Lead Time เฉลี่ย (วัน)</label>
         <input type="number" id="leadTimeInput" min="0" step="1" value="4">
@@ -336,53 +335,14 @@
       </div>
       <div class="config-spacer"></div>
     </div>
-    <div class="status-line" id="statusLineSummary"></div>
   </div>
+
+  <button class="btn btn-primary fab-upload" id="openUploadModalBtn" type="button">📁 อัปโหลด / วิเคราะห์ไฟล์</button>
 
   <div id="resultsSection">
 
     <div id="alertBanner"></div>
-
-    <div class="card">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;">
-        <div>
-          <h2 class="section-title" style="margin-bottom:4px;">🔄 Compare TikTok vs Bird Stock Gap</h2>
-          <p class="section-desc" style="margin:0;">SKU ที่สต็อก TikTok กับ Bird ต่างกันตั้งแต่ 10 ชิ้นขึ้นไป (ไม่ว่าฝั่งไหนมากกว่า) — ใช้ดูว่าควรดึงของเข้า TikTok จากคลังไหนก่อน</p>
-        </div>
-        <button class="btn btn-primary" id="gapListBtn" type="button">Compare TikTok vs Bird | Gap ≥ 10 <span class="count-pill" id="gapListCountPill">0</span></button>
-      </div>
-    </div>
-
-    <div class="card hero">
-      <h2 class="section-title">⭐ FOCUS WATCHLIST <span class="count-pill" id="focusCountPill"></span></h2>
-      <p class="section-desc">SKU ที่คุณติดตามเป็นพิเศษ — คลิกไอคอน ⭐ ที่คอลัมน์แรกของตาราง "รายการทั้งหมด" ด้านล่างเพื่อเพิ่ม/เอาออกจากรายการนี้ ระบบจะเตือนทันทีถ้ารายการที่ติดตามเข้าเกณฑ์วิกฤต</p>
-      <div id="focusBanner"></div>
-      <div class="table-scroll">
-        <table id="focusTable">
-          <thead>
-            <tr>
-              <th>⭐</th>
-              <th data-key="priority">Priority</th>
-              <th data-key="productCode">Product Code</th>
-              <th data-key="productName">Product Name</th>
-              <th data-key="family">Family</th>
-              <th class="num" data-key="tiktokStock">TikTok</th>
-              <th class="num" data-key="birdStock">Bird</th>
-              <th class="num" data-key="daysLeft">Days Left</th>
-              <th data-key="trend">Trend</th>
-              <th data-key="recommendation">Recommendation</th>
-            </tr>
-          </thead>
-          <tbody id="focusTbody"></tbody>
-        </table>
-      </div>
-      <div class="filter-bar" style="margin-top:12px; margin-bottom:0;">
-        <div class="spacer"></div>
-        <button class="btn btn-ghost btn-sm" id="exportFocusBtn" type="button">⬇ Export Focus List & Restock ETA (.json)</button>
-        <button class="btn-link" id="importFocusBtn" type="button">📂 Import Focus List & Restock ETA</button>
-        <input type="file" id="importFocusInput" accept=".json" style="display:none">
-      </div>
-    </div>
+    <div class="top-info-line" id="topInfoLine"></div>
 
     <div class="card hero">
       <h2 class="section-title">🎯 TODAY'S REPLENISHMENT <span class="count-pill" id="todayCountPill"></span></h2>
@@ -436,6 +396,47 @@
           <button id="todayPgNext">ถัดไป ›</button>
           <button id="todayPgLast">สุดท้าย »</button>
         </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;">
+        <div>
+          <h2 class="section-title" style="margin-bottom:4px;">🔄 Compare TikTok vs Bird Stock Gap</h2>
+          <p class="section-desc" style="margin:0;">SKU ที่สต็อก TikTok กับ Bird ต่างกันตั้งแต่ 10 ชิ้นขึ้นไป (ไม่ว่าฝั่งไหนมากกว่า) — ใช้ดูว่าควรดึงของเข้า TikTok จากคลังไหนก่อน</p>
+        </div>
+        <button class="btn btn-primary" id="gapListBtn" type="button">Compare TikTok vs Bird | Gap ≥ 10 <span class="count-pill" id="gapListCountPill">0</span></button>
+      </div>
+    </div>
+
+    <div class="card hero">
+      <h2 class="section-title">⭐ FOCUS WATCHLIST <span class="count-pill" id="focusCountPill"></span></h2>
+      <p class="section-desc">SKU ที่คุณติดตามเป็นพิเศษ — คลิกไอคอน ⭐ ที่คอลัมน์แรกของตาราง "รายการทั้งหมด" ด้านล่างเพื่อเพิ่ม/เอาออกจากรายการนี้ ระบบจะเตือนทันทีถ้ารายการที่ติดตามเข้าเกณฑ์วิกฤต</p>
+      <div id="focusBanner"></div>
+      <div class="table-scroll">
+        <table id="focusTable">
+          <thead>
+            <tr>
+              <th>⭐</th>
+              <th data-key="priority">Priority</th>
+              <th data-key="productCode">Product Code</th>
+              <th data-key="productName">Product Name</th>
+              <th data-key="family">Family</th>
+              <th class="num" data-key="tiktokStock">TikTok</th>
+              <th class="num" data-key="birdStock">Bird</th>
+              <th class="num" data-key="daysLeft">Days Left</th>
+              <th data-key="trend">Trend</th>
+              <th data-key="recommendation">Recommendation</th>
+            </tr>
+          </thead>
+          <tbody id="focusTbody"></tbody>
+        </table>
+      </div>
+      <div class="filter-bar" style="margin-top:12px; margin-bottom:0;">
+        <div class="spacer"></div>
+        <button class="btn btn-ghost btn-sm" id="exportFocusBtn" type="button">⬇ Export Focus List & Restock ETA (.json)</button>
+        <button class="btn-link" id="importFocusBtn" type="button">📂 Import Focus List & Restock ETA</button>
+        <input type="file" id="importFocusInput" accept=".json" style="display:none">
       </div>
     </div>
 
@@ -2573,30 +2574,39 @@
 
   /* ------------------------------ UPLOAD / DROPZONE --------------------------- */
   function setStatus(msg, cls){
-    // Mirrored to both the modal's own status line and the persistent summary line on the
-    // main page, so feedback is visible whether the upload modal is open or already closed.
-    ['statusLine','statusLineSummary'].forEach(function(id){
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.textContent = msg;
-      el.className = 'status-line' + (cls?(' '+cls):'');
-    });
+    const el = document.getElementById('statusLine');
+    el.textContent = msg;
+    el.className = 'status-line' + (cls?(' '+cls):'');
   }
-  function updateUploadSummaryText(){
-    const el = document.getElementById('uploadSummaryText');
+  // Bangkok is a fixed UTC+7 offset year-round (no DST) — shift the true UTC timestamp by 7h
+  // and read it back with UTC getters, so this is correct regardless of the viewer's own
+  // local timezone (no reliance on Intl timeZone support/locale quirks).
+  function bangkokNow(){
+    const now = new Date();
+    const utcMs = now.getTime() + now.getTimezoneOffset()*60000;
+    return new Date(utcMs + 7*60*60000);
+  }
+  function fmtBangkokDateTime(d){
+    const pad = x => String(x).padStart(2,'0');
+    return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())+' '+pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())+' น. (เวลาไทย)';
+  }
+  // Minimal "what am I looking at" line under the alert banner — just the data's date (not
+  // file names, that detail lives in the upload modal) plus a live Bangkok "as of" timestamp.
+  function renderTopInfoLine(){
+    const el = document.getElementById('topInfoLine');
     if (!el) return;
-    if (!ttMeta && !birdMeta){
-      el.textContent = 'ยังไม่ได้โหลดไฟล์ — กดปุ่ม "อัปโหลด / วิเคราะห์ไฟล์" เพื่อเริ่ม';
-      return;
-    }
-    const parts = [];
-    if (ttMeta) parts.push('TikTok: ' + ttMeta.name + (ttMeta.embedded ? ' (ฝังไว้ล่วงหน้า)' : ''));
-    if (birdMeta) parts.push('Bird: ' + birdMeta.name + (birdMeta.embedded ? ' (ฝังไว้ล่วงหน้า)' : ''));
-    if (snapshotDateOverride) parts.push('ข้อมูลวันที่ ' + snapshotDateOverride);
-    el.textContent = parts.join(' · ');
+    const dataDate = snapshotDateOverride || (snapshotRunLog.length ? snapshotRunLog[snapshotRunLog.length-1].date : '');
+    el.textContent = (dataDate ? ('ข้อมูลวันที่ ' + dataDate + ' · ') : '') + 'อัปเดตหน้าเมื่อ ' + fmtBangkokDateTime(bangkokNow());
   }
-  function openUploadModal(){ document.getElementById('uploadModalBackdrop').classList.add('open'); }
-  function closeUploadModal(){ document.getElementById('uploadModalBackdrop').classList.remove('open'); }
+  setInterval(renderTopInfoLine, 60000);
+  function openUploadModal(){
+    document.getElementById('uploadModalBackdrop').classList.add('open');
+    document.getElementById('openUploadModalBtn').style.display = 'none';
+  }
+  function closeUploadModal(){
+    document.getElementById('uploadModalBackdrop').classList.remove('open');
+    document.getElementById('openUploadModalBtn').style.display = '';
+  }
   document.getElementById('openUploadModalBtn').addEventListener('click', openUploadModal);
   document.getElementById('uploadModalClose').addEventListener('click', closeUploadModal);
   document.getElementById('uploadModalBackdrop').addEventListener('click', function(e){
@@ -2699,7 +2709,7 @@
     function finishOk(){
       isAnalyzing = false;
       runAnalysis();
-      updateUploadSummaryText();
+      renderTopInfoLine();
       closeUploadModal();
       btn.disabled = false; btn.textContent = 'วิเคราะห์ข้อมูล (วิเคราะห์ใหม่)';
     }
@@ -2728,7 +2738,7 @@
     // hard-to-rebuild cross-day data, and "clear all data" here means clearing the
     // current upload/analysis session, not erasing replenishment history.
     rows = []; baseRows = []; familyRollup = [];
-    updateUploadSummaryText();
+    renderTopInfoLine();
     checkReady();
   });
 
@@ -2858,7 +2868,7 @@
     document.getElementById('dzBirdMeta').textContent = meta.snapshotDate ? ('ข้อมูลวันที่ ' + meta.snapshotDate) : '';
     checkReady();
     runAnalysis();
-    updateUploadSummaryText();
+    renderTopInfoLine();
     setStatus('รายงานประจำวันที่ ' + (meta.snapshotDate || '') + ' — โหลดข้อมูลที่ฝังไว้ล่วงหน้าอัตโนมัติ (ไม่ต้องอัปโหลดไฟล์) · ต้องการวิเคราะห์วันอื่นให้กดปุ่ม "อัปโหลด / วิเคราะห์ไฟล์" ด้านบนแทน', 'ok');
     document.getElementById('resultsSection').style.display = 'block';
   }
