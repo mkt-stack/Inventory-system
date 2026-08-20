@@ -714,6 +714,30 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="snapshotDateModalBackdrop">
+    <div class="modal-panel" style="max-width:900px;">
+      <div class="modal-head">
+        <div>
+          <p class="modal-title" id="snapshotDateModalTitle">📅 สต็อก TikTok ณ วันที่</p>
+          <p class="modal-sub" id="snapshotDateModalSub"></p>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-ghost btn-sm" id="snapshotDateExportBtn" type="button">⬇ Export CSV</button>
+          <button class="modal-close" id="snapshotDateModalClose" type="button">✕</button>
+        </div>
+      </div>
+      <p class="section-desc" style="margin-top:0;">แสดงเฉพาะจำนวนสต็อก TikTok ที่บันทึกไว้ของวันนี้ (จากประวัติ Snapshot ในเบราว์เซอร์ ไม่ต้องอัปโหลดไฟล์ใหม่) — ไม่รวม Bird/Suggested Qty/Priority ของวันนั้น เพราะระบบเก็บเฉพาะสต็อก TikTok รายวันเท่านั้น ข้อมูล Bird ที่เห็นในหน้าอื่นเป็นของไฟล์ล่าสุดที่วิเคราะห์เสมอ</p>
+      <div class="table-scroll" style="max-height:60vh; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr><th>Product Code</th><th>Product Name</th><th>SKU</th><th>Family</th><th class="num">TikTok Stock</th></tr>
+          </thead>
+          <tbody id="snapshotDateModalTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="gapListModalBackdrop">
     <div class="modal-panel" style="max-width:1320px;">
       <div class="modal-head">
@@ -2686,9 +2710,75 @@
   function renderSnapshotTable(){
     document.getElementById('snapPill').textContent = fmtInt(snapshotRunLog.length) + ' วัน';
     document.getElementById('snapTbody').innerHTML = snapshotRunLog.slice().reverse().map(function(s){
-      return '<tr><td>'+escapeHtml(s.date)+'</td><td class="num">'+fmtInt(s.skuCount)+'</td><td class="num">'+fmtInt(s.totalStock)+'</td></tr>';
+      return '<tr><td class="mono link-cell" data-date="'+escapeHtml(s.date)+'" title="ดูสต็อก TikTok รายวันของวันนี้ ไม่ต้องอัปโหลดไฟล์ใหม่">'+escapeHtml(s.date)+'</td><td class="num">'+fmtInt(s.skuCount)+'</td><td class="num">'+fmtInt(s.totalStock)+'</td></tr>';
     }).join('');
+    Array.from(document.getElementById('snapTbody').querySelectorAll('.link-cell')).forEach(function(td){
+      td.addEventListener('click', function(){ openSnapshotDateModal(td.getAttribute('data-date')); });
+    });
   }
+
+  /* ------------------------------ SNAPSHOT DATE LOOKUP ------------------------------- */
+  // snapshotStore only ever recorded each SKU's TikTok stock QUANTITY per day, never a full
+  // day's Bird availability/pricing/Suggested Qty (those only ever exist for whichever file
+  // was most recently analyzed) -- so this can show "what was the stock on this date" from
+  // data already in the browser, but can't reconstruct that day's full dashboard. Includes
+  // SKUs delisted since (no longer in baseRows) with blank product info rather than dropping
+  // them, since their historical stock number is still real and worth seeing.
+  function getStockOnDate(dateStr){
+    const productBySku = new Map();
+    baseRows.forEach(function(b){ productBySku.set(b.sku, b); });
+    const results = [];
+    snapshotStore.forEach(function(hist, sku){
+      const entry = hist.find(function(h){ return h.date===dateStr; });
+      if (!entry) return;
+      const b = productBySku.get(sku);
+      results.push({
+        sku: sku,
+        productCode: b ? b.productCode : '',
+        productName: b ? cleanProductName(b.productName, b.productCode) : '(SKU นี้ไม่อยู่ในข้อมูลที่วิเคราะห์ล่าสุด)',
+        family: b ? b.family : '',
+        stock: entry.stock,
+      });
+    });
+    return results.sort(function(a,b){ return (a.productCode||'').localeCompare(b.productCode||'') || a.sku.localeCompare(b.sku); });
+  }
+  function renderSnapshotDateModalBody(dateStr){
+    const list = getStockOnDate(dateStr);
+    document.getElementById('snapshotDateModalTitle').textContent = '📅 สต็อก TikTok ณ วันที่ ' + dateStr;
+    document.getElementById('snapshotDateModalSub').textContent = fmtInt(list.length) + ' SKU';
+    document.getElementById('snapshotDateModalTbody').innerHTML = list.length ? list.map(function(r){
+      return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
+        '<td class="truncate" title="'+escapeHtml(r.productName)+'">'+escapeHtml(r.productName)+'</td>'+
+        '<td class="mono">'+escapeHtml(r.sku)+'</td>'+
+        '<td>'+escapeHtml(r.family||'—')+'</td>'+
+        '<td class="num">'+fmtInt(r.stock)+'</td></tr>';
+    }).join('') : '<tr><td colspan="5" class="focus-empty">ไม่มีข้อมูลสต็อกของวันนี้</td></tr>';
+    Array.from(document.getElementById('snapshotDateModalTbody').querySelectorAll('.link-cell')).forEach(function(td){
+      const sku = td.getAttribute('data-sku');
+      if (!baseRows.some(function(b){ return b.sku===sku; })) return; // delisted SKU -- no current row to open
+      td.addEventListener('click', function(){ closeSnapshotDateModal(); openProductModal(sku); });
+    });
+  }
+  let currentSnapshotDate = null;
+  function openSnapshotDateModal(dateStr){
+    currentSnapshotDate = dateStr;
+    renderSnapshotDateModalBody(dateStr);
+    document.getElementById('snapshotDateModalBackdrop').classList.add('open');
+  }
+  function closeSnapshotDateModal(){ document.getElementById('snapshotDateModalBackdrop').classList.remove('open'); }
+  function exportSnapshotDateCsv(){
+    if (!currentSnapshotDate) return;
+    const cols = ['Product Code','Product Name','SKU','Family','TikTok Stock'];
+    const csv = toCsv(cols, getStockOnDate(currentSnapshotDate), function(r){
+      return [r.productCode, r.productName, r.sku, r.family, r.stock];
+    });
+    downloadCsv(csv, 'tiktok_stock_' + currentSnapshotDate + '.csv');
+  }
+  document.getElementById('snapshotDateModalClose').addEventListener('click', closeSnapshotDateModal);
+  document.getElementById('snapshotDateExportBtn').addEventListener('click', exportSnapshotDateCsv);
+  document.getElementById('snapshotDateModalBackdrop').addEventListener('click', function(e){
+    if (e.target === document.getElementById('snapshotDateModalBackdrop')) closeSnapshotDateModal();
+  });
 
   /* ------------------------------ UPLOAD / DROPZONE --------------------------- */
   function setStatus(msg, cls){
