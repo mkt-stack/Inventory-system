@@ -318,33 +318,14 @@
   </div>
 
   <div class="card">
-    <h2 class="section-title">1. อัปโหลดไฟล์ข้อมูล</h2>
-    <p class="section-desc">
-      <b>TikTok Seller Center Stock</b> คือ Master Dataset ของระบบนี้ — ทุก SKU ที่มีใน TikTok และแมตช์เจอใน Bird จะถูกวิเคราะห์เสมอ
-      <b>Bird Warehouse Stock</b> ใช้เป็นแหล่งสำหรับ Lookup ว่ามีของให้เบิกเท่าไหร่ — SKU ที่มีใน Bird แต่ไม่ได้ขายบน TikTok จะไม่ถูกนำมาแสดงหรือวิเคราะห์ และในทางกลับกัน SKU ที่มีบน TikTok แต่หาไม่เจอใน Bird เลยก็จะถูกตัดออกจากการวิเคราะห์เช่นกัน เพราะไม่มีข้อมูลให้เบิกได้
-    </p>
-    <div class="upload-grid">
-      <div class="dropzone" id="dzTikTok">
-        <input type="file" id="fileTikTok" accept=".xlsx,.xls">
-        <div class="dz-icon">🎵</div>
-        <div class="dz-title">TikTok Seller Center Stock <span class="badge info" style="margin-left:4px;">Primary / Master</span></div>
-        <div class="dz-sub">.xlsx — คลิกหรือลากไฟล์วางที่นี่ · อัปโหลดทุกวันเพื่อสร้าง Snapshot</div>
-        <div class="dz-file" id="dzTikTokFile"></div>
-        <div class="dz-meta" id="dzTikTokMeta"></div>
-        <button class="dz-remove" id="dzTikTokRemove" style="display:none">ลบไฟล์</button>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;">
+      <div>
+        <h2 class="section-title" style="margin-bottom:4px;">ข้อมูลที่ใช้วิเคราะห์</h2>
+        <p class="section-desc" style="margin:0;" id="uploadSummaryText">ยังไม่ได้โหลดไฟล์ — กดปุ่ม "อัปโหลด / วิเคราะห์ไฟล์" เพื่อเริ่ม</p>
       </div>
-      <div class="dropzone" id="dzBird">
-        <input type="file" id="fileBird" accept=".xlsx,.xls">
-        <div class="dz-icon">📦</div>
-        <div class="dz-title">Bird Warehouse Stock <span class="badge muted" style="margin-left:4px;">Lookup สำหรับเบิก</span></div>
-        <div class="dz-sub">.xlsx — คลิกหรือลากไฟล์วางที่นี่</div>
-        <div class="dz-file" id="dzBirdFile"></div>
-        <div class="dz-meta" id="dzBirdMeta"></div>
-        <button class="dz-remove" id="dzBirdRemove" style="display:none">ลบไฟล์</button>
-      </div>
+      <button class="btn btn-primary btn-sm" id="openUploadModalBtn" type="button">📁 อัปโหลด / วิเคราะห์ไฟล์</button>
     </div>
-
-    <div class="config-row">
+    <div class="config-row" style="margin-top:14px;">
       <div class="config-field">
         <label for="leadTimeInput" title="ใช้กำหนดจุด Reorder (P2) และวันที่ควรสั่ง (Order By) — ยังไม่มีข้อมูล Lead Time จริงต่อ SKU/Supplier จึงเป็นค่าเดียวที่ปรับได้">Lead Time เฉลี่ย (วัน)</label>
         <input type="number" id="leadTimeInput" min="0" step="1" value="4">
@@ -354,14 +335,8 @@
         <input type="number" id="campaignMultiplierInput" min="0.1" step="0.1" value="1">
       </div>
       <div class="config-spacer"></div>
-      <div style="display:flex; gap:10px;">
-        <button class="btn btn-ghost" id="resetBtn" type="button">ล้างข้อมูลทั้งหมด</button>
-        <button class="btn btn-primary" id="analyzeBtn" type="button" disabled>วิเคราะห์ข้อมูล</button>
-      </div>
     </div>
-    <div class="status-line" id="statusLine"></div>
-    <button class="btn-link" id="importSnapBtn" type="button">📂 โหลดประวัติ Snapshot ที่เคยบันทึกไว้ (สำหรับดูแนวโน้มข้ามวัน)</button>
-    <input type="file" id="importSnapInput" accept=".json" style="display:none">
+    <div class="status-line" id="statusLineSummary"></div>
   </div>
 
   <div id="resultsSection">
@@ -639,6 +614,52 @@
       <div class="note-box" id="noteBox"></div>
     </div>
 
+  </div>
+
+  <div class="modal-backdrop" id="uploadModalBackdrop">
+    <div class="modal-panel" style="max-width:760px;">
+      <div class="modal-head">
+        <div>
+          <p class="modal-title">📁 อัปโหลดไฟล์ข้อมูล</p>
+          <p class="modal-sub">อัปโหลด TikTok Seller Center Stock และ Bird Warehouse Stock เพื่อวิเคราะห์ใหม่</p>
+        </div>
+        <button class="modal-close" id="uploadModalClose" type="button">✕</button>
+      </div>
+      <p class="section-desc" style="margin-top:0;">
+        <b>TikTok Seller Center Stock</b> คือ Master Dataset ของระบบนี้ — ทุก SKU ที่มีใน TikTok และแมตช์เจอใน Bird จะถูกวิเคราะห์เสมอ
+        <b>Bird Warehouse Stock</b> ใช้เป็นแหล่งสำหรับ Lookup ว่ามีของให้เบิกเท่าไหร่ — SKU ที่มีใน Bird แต่ไม่ได้ขายบน TikTok จะไม่ถูกนำมาแสดงหรือวิเคราะห์ และในทางกลับกัน SKU ที่มีบน TikTok แต่หาไม่เจอใน Bird เลยก็จะถูกตัดออกจากการวิเคราะห์เช่นกัน เพราะไม่มีข้อมูลให้เบิกได้
+      </p>
+      <div class="upload-grid">
+        <div class="dropzone" id="dzTikTok">
+          <input type="file" id="fileTikTok" accept=".xlsx,.xls">
+          <div class="dz-icon">🎵</div>
+          <div class="dz-title">TikTok Seller Center Stock <span class="badge info" style="margin-left:4px;">Primary / Master</span></div>
+          <div class="dz-sub">.xlsx — คลิกหรือลากไฟล์วางที่นี่ · อัปโหลดทุกวันเพื่อสร้าง Snapshot</div>
+          <div class="dz-file" id="dzTikTokFile"></div>
+          <div class="dz-meta" id="dzTikTokMeta"></div>
+          <button class="dz-remove" id="dzTikTokRemove" style="display:none">ลบไฟล์</button>
+        </div>
+        <div class="dropzone" id="dzBird">
+          <input type="file" id="fileBird" accept=".xlsx,.xls">
+          <div class="dz-icon">📦</div>
+          <div class="dz-title">Bird Warehouse Stock <span class="badge muted" style="margin-left:4px;">Lookup สำหรับเบิก</span></div>
+          <div class="dz-sub">.xlsx — คลิกหรือลากไฟล์วางที่นี่</div>
+          <div class="dz-file" id="dzBirdFile"></div>
+          <div class="dz-meta" id="dzBirdMeta"></div>
+          <button class="dz-remove" id="dzBirdRemove" style="display:none">ลบไฟล์</button>
+        </div>
+      </div>
+      <div class="config-row" style="border-top:none; padding-top:0;">
+        <div class="config-spacer"></div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-ghost" id="resetBtn" type="button">ล้างข้อมูลทั้งหมด</button>
+          <button class="btn btn-primary" id="analyzeBtn" type="button" disabled>วิเคราะห์ข้อมูล</button>
+        </div>
+      </div>
+      <div class="status-line" id="statusLine"></div>
+      <button class="btn-link" id="importSnapBtn" type="button">📂 โหลดประวัติ Snapshot ที่เคยบันทึกไว้ (สำหรับดูแนวโน้มข้ามวัน)</button>
+      <input type="file" id="importSnapInput" accept=".json" style="display:none">
+    </div>
   </div>
 
   <div class="modal-backdrop" id="productModalBackdrop">
@@ -2552,10 +2573,35 @@
 
   /* ------------------------------ UPLOAD / DROPZONE --------------------------- */
   function setStatus(msg, cls){
-    const el = document.getElementById('statusLine');
-    el.textContent = msg;
-    el.className = 'status-line' + (cls?(' '+cls):'');
+    // Mirrored to both the modal's own status line and the persistent summary line on the
+    // main page, so feedback is visible whether the upload modal is open or already closed.
+    ['statusLine','statusLineSummary'].forEach(function(id){
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = msg;
+      el.className = 'status-line' + (cls?(' '+cls):'');
+    });
   }
+  function updateUploadSummaryText(){
+    const el = document.getElementById('uploadSummaryText');
+    if (!el) return;
+    if (!ttMeta && !birdMeta){
+      el.textContent = 'ยังไม่ได้โหลดไฟล์ — กดปุ่ม "อัปโหลด / วิเคราะห์ไฟล์" เพื่อเริ่ม';
+      return;
+    }
+    const parts = [];
+    if (ttMeta) parts.push('TikTok: ' + ttMeta.name + (ttMeta.embedded ? ' (ฝังไว้ล่วงหน้า)' : ''));
+    if (birdMeta) parts.push('Bird: ' + birdMeta.name + (birdMeta.embedded ? ' (ฝังไว้ล่วงหน้า)' : ''));
+    if (snapshotDateOverride) parts.push('ข้อมูลวันที่ ' + snapshotDateOverride);
+    el.textContent = parts.join(' · ');
+  }
+  function openUploadModal(){ document.getElementById('uploadModalBackdrop').classList.add('open'); }
+  function closeUploadModal(){ document.getElementById('uploadModalBackdrop').classList.remove('open'); }
+  document.getElementById('openUploadModalBtn').addEventListener('click', openUploadModal);
+  document.getElementById('uploadModalClose').addEventListener('click', closeUploadModal);
+  document.getElementById('uploadModalBackdrop').addEventListener('click', function(e){
+    if (e.target === document.getElementById('uploadModalBackdrop')) closeUploadModal();
+  });
   function checkReady(){
     const ready = !!(ttFile && birdFile);
     document.getElementById('analyzeBtn').disabled = !ready;
@@ -2653,6 +2699,8 @@
     function finishOk(){
       isAnalyzing = false;
       runAnalysis();
+      updateUploadSummaryText();
+      closeUploadModal();
       btn.disabled = false; btn.textContent = 'วิเคราะห์ข้อมูล (วิเคราะห์ใหม่)';
     }
     function finishErr(err){
@@ -2680,6 +2728,7 @@
     // hard-to-rebuild cross-day data, and "clear all data" here means clearing the
     // current upload/analysis session, not erasing replenishment history.
     rows = []; baseRows = []; familyRollup = [];
+    updateUploadSummaryText();
     checkReady();
   });
 
@@ -2779,10 +2828,13 @@
   // normal drag-and-drop Analyze Files flow when no embedded data is present (unchanged).
   function tryAutoLoadEmbeddedData(){
     const el = document.getElementById('embeddedData');
-    if (!el || !el.textContent || !el.textContent.trim()) return;
+    // No embedded data means this is the blank editable template, not a generated daily
+    // report — open the upload modal automatically so there's an obvious way to start,
+    // since the dropzones are no longer sitting in the open on the main page.
+    if (!el || !el.textContent || !el.textContent.trim()){ openUploadModal(); return; }
     let payload;
-    try { payload = JSON.parse(el.textContent); } catch(e){ console.error('embeddedData JSON parse failed', e); return; }
-    if (!payload || !payload.tiktokAoa || !payload.birdAoa) return;
+    try { payload = JSON.parse(el.textContent); } catch(e){ console.error('embeddedData JSON parse failed', e); openUploadModal(); return; }
+    if (!payload || !payload.tiktokAoa || !payload.birdAoa){ openUploadModal(); return; }
 
     try {
       ttMap = parseTikTok(payload.tiktokAoa);
@@ -2792,10 +2844,13 @@
     } catch(e){
       console.error('auto-load parse failed', e);
       setStatus('โหลดข้อมูลที่ฝังไว้ล่วงหน้าไม่สำเร็จ: ' + e.message + ' — อัปโหลดไฟล์ด้วยตนเองแทน', 'err');
+      openUploadModal();
       return;
     }
 
     const meta = payload.meta || {};
+    ttMeta = { name: meta.tiktokFileName || 'TikTok export', embedded: true };
+    birdMeta = { name: meta.birdFileName || 'Bird export', embedded: true };
     ['dzTikTok','dzBird'].forEach(function(id){ document.getElementById(id).classList.add('loaded'); });
     document.getElementById('dzTikTokFile').innerHTML = 'ไฟล์: <b>' + escapeHtml(meta.tiktokFileName || 'TikTok export') + '</b> (ฝังไว้ล่วงหน้า)';
     document.getElementById('dzBirdFile').innerHTML = 'ไฟล์: <b>' + escapeHtml(meta.birdFileName || 'Bird export') + '</b> (ฝังไว้ล่วงหน้า)';
@@ -2803,7 +2858,8 @@
     document.getElementById('dzBirdMeta').textContent = meta.snapshotDate ? ('ข้อมูลวันที่ ' + meta.snapshotDate) : '';
     checkReady();
     runAnalysis();
-    setStatus('รายงานประจำวันที่ ' + (meta.snapshotDate || '') + ' — โหลดข้อมูลที่ฝังไว้ล่วงหน้าอัตโนมัติ (ไม่ต้องอัปโหลดไฟล์) · ต้องการวิเคราะห์วันอื่นให้ลากไฟล์ใหม่ลงในช่องอัปโหลดด้านบนแทนที่', 'ok');
+    updateUploadSummaryText();
+    setStatus('รายงานประจำวันที่ ' + (meta.snapshotDate || '') + ' — โหลดข้อมูลที่ฝังไว้ล่วงหน้าอัตโนมัติ (ไม่ต้องอัปโหลดไฟล์) · ต้องการวิเคราะห์วันอื่นให้กดปุ่ม "อัปโหลด / วิเคราะห์ไฟล์" ด้านบนแทน', 'ok');
     document.getElementById('resultsSection').style.display = 'block';
   }
   tryAutoLoadEmbeddedData();
