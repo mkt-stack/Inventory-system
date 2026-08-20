@@ -574,8 +574,6 @@
               <th data-key="size">Size</th>
               <th data-key="sku">SKU</th>
               <th class="num" data-key="tiktokStock" title="จำนวนที่มี (พร้อมขาย ไม่รวมสต็อกที่ล็อก)">TikTok Stock</th>
-              <th class="num" data-key="tiktokLocked" title="จำนวนที่ล็อก — สำรอง/ผูกมัดกับคำสั่งซื้อหรือแคมเปญแล้ว">TikTok Locked</th>
-              <th class="num" data-key="tiktokTotal" title="จำนวนทั้งหมดใน Thailand Pickup Warehouse = พร้อมขาย + ล็อก">TikTok Total</th>
               <th class="num" data-key="birdNonl" title="Bird NONL — สต็อกออนไลน์ดิบจากไฟล์ Bird (ก่อนตีความสถานะ)">Bird NONL</th>
               <th class="num" data-key="birdNoff" title="Bird NOFF — สต็อกออฟไลน์/หน้าร้านดิบจากไฟล์ Bird">Bird NOFF</th>
               <th class="num" data-key="birdTotal" title="Bird Total = NONL + NOFF">Bird Total</th>
@@ -769,7 +767,10 @@
           <thead>
             <tr>
               <th>Product Code</th><th>Product Name</th><th>SKU</th>
+              <th class="num">TikTok Stock</th>
               <th class="num">Suggested</th><th class="num">NONL (Online)</th><th class="num">NOFF (Offline)</th>
+              <th class="num" title="Estimated Daily Usage เฉลี่ยจากจำนวนวัน Snapshot ที่มีข้อมูลจริง">Average/Day</th>
+              <th title="จำนวนสต็อก TikTok ที่บันทึกไว้แต่ละวันในช่วงที่ติดตาม (เก่า→ใหม่) — ชี้เมาส์เพื่อดูวันที่ของแต่ละค่า">History</th>
               <th class="num">Allocate from NOFF</th>
             </tr>
           </thead>
@@ -1931,11 +1932,14 @@
       return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
         '<td class="strong truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
         '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
+        '<td class="num">'+fmtInt(r.tiktokStock)+'</td>'+
         '<td class="num">'+fmtInt(r.suggestedQty)+'</td>'+
         '<td class="num">'+fmtInt(r.birdNonl)+'</td>'+
         '<td class="num">'+fmtInt(r.birdNoff)+'</td>'+
+        '<td class="num">'+(r.usage!==null?fmtNum1(r.usage):'—')+'</td>'+
+        '<td class="mono truncate" style="max-width:160px;" title="'+escapeHtml(r.historyQtyTooltip)+'">'+escapeHtml(r.historyQtyText||'—')+'</td>'+
         '<td class="num strong rec-text warning">'+fmtInt(r.noffAllocation)+'</td></tr>';
-    }).join('') : '<tr><td colspan="7" class="focus-empty">ไม่มีรายการตอนนี้ 🎉</td></tr>';
+    }).join('') : '<tr><td colspan="10" class="focus-empty">ไม่มีรายการตอนนี้ 🎉</td></tr>';
     Array.from(document.getElementById('noffModalTbody').querySelectorAll('.link-cell')).forEach(function(td){
       td.addEventListener('click', function(){ closeNoffModal(); openProductModal(td.getAttribute('data-sku')); });
     });
@@ -1943,9 +1947,10 @@
   function openNoffModal(){ renderNoffModalBody(); document.getElementById('noffModalBackdrop').classList.add('open'); }
   function closeNoffModal(){ document.getElementById('noffModalBackdrop').classList.remove('open'); }
   function exportNoffCsv(){
-    const cols = ['Product Code','Product Name','SKU','Suggested Qty','NONL (Online)','NOFF (Offline)','Allocate from NOFF'];
+    const cols = ['Product Code','Product Name','SKU','TikTok Stock','Suggested Qty','NONL (Online)','NOFF (Offline)','Average/Day','Qty History (Last 30d)','Allocate from NOFF'];
     const csv = toCsv(cols, getNoffAllocationRows(), function(r){
-      return [r.productCode, cleanProductName(r.productName,r.productCode), displaySku(r), r.suggestedQty, r.birdNonl, r.birdNoff, r.noffAllocation];
+      return [r.productCode, cleanProductName(r.productName,r.productCode), displaySku(r), r.tiktokStock, r.suggestedQty, r.birdNonl, r.birdNoff,
+        r.usage!==null?r.usage.toFixed(2):'', r.historyQtyText||'', r.noffAllocation];
     });
     downloadCsv(csv, 'noff_allocation.csv');
   }
@@ -2207,6 +2212,9 @@
         filterFamily = td.getAttribute('data-fam');
         document.getElementById('familyFilter').value = filterFamily;
         page = 1; renderMainTable();
+        // The table lives inside the "inventory" tab panel (display:none unless active) --
+        // switch to it first, or scrollIntoView on a hidden element is a silent no-op.
+        switchTab('inventory');
         document.getElementById('mainTable').scrollIntoView({ behavior:'smooth', block:'start' });
       });
     });
@@ -2367,8 +2375,6 @@
         '<td>'+escapeHtml(r.size||'—')+'</td>'+
         '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
         '<td class="num">'+fmtInt(r.tiktokStock)+'</td>'+
-        '<td class="num">'+fmtInt(r.tiktokLocked)+'</td>'+
-        '<td class="num">'+fmtInt(r.tiktokTotal)+'</td>'+
         '<td class="num">'+fmtInt(r.birdNonl)+'</td>'+
         '<td class="num">'+fmtInt(r.birdNoff)+'</td>'+
         '<td class="num">'+fmtInt(r.birdTotal)+'</td>'+
@@ -2620,12 +2626,12 @@
   }
   function exportCsv(){
     const cols = ['Product Code','Product Name','Family','SubCollection','Category','Color','Size','SKU',
-      'TikTok Stock','TikTok Locked','TikTok Total','Bird NONL','Bird NOFF','Bird Total','Bird Available','Bird Status','Bird Offline Stock',
+      'TikTok Stock','Bird NONL','Bird NOFF','Bird Total','Bird Available','Bird Status','Bird Offline Stock',
       'Daily Stock Change','Stock Status','Trend','Est Daily Usage','Est Days Left','Suggested Qty','Final Qty','Sales at Risk','Replenishment Status','Priority'];
     const list = sortRows(getFiltered());
     const csv = toCsv(cols, list, function(r){
       return [r.productCode, cleanProductName(r.productName,r.productCode), r.family, r.subCollection, r.category, r.color, r.size, displaySku(r), r.tiktokStock,
-        r.tiktokLocked, r.tiktokTotal, r.birdNonl, r.birdNoff, r.birdTotal,
+        r.birdNonl, r.birdNoff, r.birdTotal,
         r.birdStatus==='OK'?r.birdStock:r.birdStatus, r.birdStatus, r.birdOfflineQty!==null?r.birdOfflineQty:'',
         r.dailyChange!==null?r.dailyChange:'', specStockStatus(r), r.trend||'', r.usage!==null?r.usage.toFixed(2):'',
         r.daysLeft!==null?r.daysLeft.toFixed(2):'', r.suggestedQty, r.finalQty, r.salesAtRisk!==null?Math.round(r.salesAtRisk):'', r.replenishStatus, r.priority];
