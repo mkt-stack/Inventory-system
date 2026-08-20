@@ -612,7 +612,7 @@
       <h2 class="section-title">Snapshot History <span class="count-pill" id="snapPill"></span></h2>
       <p class="section-desc">
         ทุกครั้งที่วิเคราะห์ ระบบจะบันทึก Snapshot ของวันนั้นต่อท้าย (ไม่เขียนทับวันก่อนหน้า) แล้วใช้ประวัตินี้คำนวณ Estimated Daily Usage / Trend —
-        เนื่องจากหน้านี้ไม่บันทึกข้อมูลถาวรในเบราว์เซอร์ ถ้าต้องการดูแนวโน้มข้ามวัน ให้กด "Export Snapshot" เก็บไฟล์ไว้ แล้วกด "โหลดประวัติ Snapshot" ที่ด้านบนตอนกลับมาใช้งานครั้งถัดไป ก่อนอัปโหลดไฟล์ TikTok ของวันนั้น
+        เบราว์เซอร์นี้จะจำประวัตินี้ไว้ให้อัตโนมัติแล้ว (ไม่ต้องอัปโหลดไฟล์ใหม่ทุกครั้งที่เปิดหน้านี้) แต่ถ้าเปลี่ยนเครื่อง/เบราว์เซอร์ หรือกังวลว่าจะล้างข้อมูลเบราว์เซอร์ ให้กด "Export Snapshot" เก็บไฟล์ไว้เป็นสำรอง แล้วกด "โหลดประวัติ Snapshot" ที่ปุ่มอัปโหลดตอนกลับมาใช้งานเครื่อง/เบราว์เซอร์ใหม่
       </p>
       <div style="margin-bottom:10px;">
         <button class="btn btn-ghost btn-sm" id="exportSnapBtn" type="button">⬇ Export Snapshot History (.json)</button>
@@ -817,7 +817,7 @@
   </div>
 
   <div class="footer-note">
-    ประมวลผลทั้งหมดในเบราว์เซอร์ของคุณ — ไฟล์ไม่ถูกอัปโหลดไปที่เซิร์ฟเวอร์ใดๆ · ข้อมูลจะหายไปเมื่อปิดหน้านี้ (ใช้ Export/Import Snapshot เพื่อเก็บประวัติข้ามวัน)
+    ประมวลผลทั้งหมดในเบราว์เซอร์ของคุณ — ไฟล์ไม่ถูกอัปโหลดไปที่เซิร์ฟเวอร์ใดๆ · เบราว์เซอร์นี้จะจำการวิเคราะห์ล่าสุดไว้ให้อัตโนมัติ (localStorage) แต่ถ้าเปลี่ยนเครื่อง/เบราว์เซอร์ หรือล้างข้อมูลเบราว์เซอร์ ให้ใช้ Export/Import Snapshot เพื่อย้ายประวัติตาม
   </div>
 
 </div>
@@ -1794,6 +1794,7 @@
   function toggleFocus(sku){
     if (focusedSkus.has(sku)) focusedSkus.delete(sku); else focusedSkus.add(sku);
     renderFocus(); renderTodayTable(); renderMainTable();
+    persistState();
   }
   function wireFocusStars(containerId){
     Array.from(document.getElementById(containerId).querySelectorAll('.focus-star')).forEach(function(el){
@@ -1983,12 +1984,14 @@
         const sku = input.getAttribute('data-sku');
         if (input.value) restockEta.set(sku, input.value); else restockEta.delete(sku);
         input.title = restockEtaStatus(sku).label;
+        persistState();
       });
     });
     Array.from(tbody.querySelectorAll('.restock-status-select')).forEach(function(select){
       select.addEventListener('change', function(){
         const sku = select.getAttribute('data-sku');
         if (select.value === RESTOCK_STATUS_DEFAULT) restockStatus.delete(sku); else restockStatus.set(sku, select.value);
+        persistState();
       });
     });
     Array.from(tbody.querySelectorAll('[data-remove-manual]')).forEach(function(btn){
@@ -1996,6 +1999,7 @@
         manualStockedOut.delete(btn.getAttribute('data-remove-manual'));
         renderStockedOutModalBody();
         renderCriticalActionPanels();
+        persistState();
       });
     });
   }
@@ -2053,6 +2057,7 @@
         }
         renderStockedOutModalBody();
         renderCriticalActionPanels();
+        persistState();
       });
     });
   }
@@ -2656,7 +2661,7 @@
         (baseRows && baseRows.__excludedNotFoundCount>0 ? ' — รอบล่าสุดตัดออกไป ' + fmtInt(baseRows.__excludedNotFoundCount) + ' SKU' : '') + '</p>',
       '<p><b>NONL / NOFF:</b> ในไฟล์ Bird คอลัมน์ NONL = จำนวนสต็อกออนไลน์ (ใช้เป็น Bird Available หลัก) และ NOFF = จำนวนสต็อกออฟไลน์/หน้าร้าน — ทั้งสองเป็นตัวเลขจริง ถ้า NONL เป็น 0 หรือว่างเปล่าแต่ NOFF มีของอยู่ ระบบจะขึ้นสถานะ "NOFF" หมายถึงของมีจริงแต่จัดสรรให้ออฟไลน์ ยังเบิกให้ TikTok ไม่ได้ทันที ส่วนค่าติดลบหรือค่าที่อ่านไม่ได้จาก Bird จะไม่ถูกนำมาคำนวณเป็น Stock = 0 หรือใช้วางแผนเบิกเด็ดขาด — ระบบจะขึ้นสถานะที่เกี่ยวข้องและแนะนำให้ตรวจสอบ Bird ก่อนเบิกเสมอ</p>',
       '<p><b>Estimated Daily Usage:</b> ประมาณจากอัตราการ<b>ลดลง</b>ของ TikTok Stock ระหว่าง Snapshot เท่านั้น (ไม่ใช่ยอดขายจริง เพราะอาจเกิดจาก Adjustment, Cancellation หรือแก้ไข Stock ได้) วันที่ Stock เพิ่มขึ้นจะถูกจัดเป็น "REPLENISHMENT EVENT" และไม่ถูกนำมาคำนวณ Usage เฉลี่ย</p>',
-      '<p><b>Snapshot History:</b> บันทึกทุกครั้งที่วิเคราะห์ โดยไม่เขียนทับวันก่อนหน้า ใช้ข้อมูลย้อนหลังสูงสุด ' + CONFIG.rollingWindowSnapshots + ' Snapshot ล่าสุดในการคำนวณ Usage/Trend หากมีประวัติน้อยกว่า 2 วัน จะแสดง "Insufficient History" — เนื่องจากหน้านี้ไม่บันทึกข้อมูลถาวร ให้ Export Snapshot เก็บไว้แล้ว Import กลับมาในครั้งถัดไปเพื่อดูแนวโน้มข้ามวัน</p>',
+      '<p><b>Snapshot History:</b> บันทึกทุกครั้งที่วิเคราะห์ โดยไม่เขียนทับวันก่อนหน้า ใช้ข้อมูลย้อนหลังสูงสุด ' + CONFIG.rollingWindowSnapshots + ' Snapshot ล่าสุดในการคำนวณ Usage/Trend หากมีประวัติน้อยกว่า 2 วัน จะแสดง "Insufficient History" — เบราว์เซอร์นี้จำประวัติไว้ให้อัตโนมัติ (localStorage) ข้ามการปิด/เปิดหน้าเว็บ ถ้าเปลี่ยนเครื่อง/เบราว์เซอร์ให้ Export Snapshot เก็บไว้แล้ว Import กลับมาที่เครื่องใหม่แทน</p>',
       '<p><b>Suggested / Final Replenishment:</b> Target Stock = Effective Daily Usage × (Target Cover + Safety Days) ปัจจุบันตั้งไว้ ' + CONFIG.targetCoverDays + ' + ' + CONFIG.safetyDays + ' วัน · Suggested Qty = MAX(Target Stock − TikTok Stock, 0) · Final Qty = MIN(Suggested Qty, Bird Available) — ถ้า Bird มีไม่พอจะขึ้นสถานะ "Warehouse Stock Insufficient" พร้อมจำนวนที่ขาด · Effective Daily Usage = Est. Daily Usage × Campaign Multiplier (ปกติคือ ×1 เท่ากับ Est. Daily Usage เดิม)</p>',
       '<p><b>Priority:</b> P0 ≤ ' + CONFIG.p0Days + ' วัน, P1 ≤ ' + CONFIG.p1Days + ' วัน, P2 ≤ ' + reorderTriggerDays() + ' วัน (= Lead Time ' + CONFIG.leadTimeDays + ' + Safety ' + CONFIG.safetyDays + ' วัน, Reorder Trigger), P3 ≤ ' + CONFIG.targetCoverDays + ' วัน (Target Cover), P4 มากกว่านั้น — SKU ที่ Bird มีปัญหาข้อมูลจะถูกจัดเป็น "Data Issue" เสมอ ไม่ว่า Days Left จะเท่าไหร่ เพราะเบิกจริงไม่ได้จนกว่าจะตรวจสอบ Bird ก่อน</p>',
       '<p><b>Lead Time / Order By:</b> ยังไม่มีข้อมูล Lead Time จริงต่อ SKU หรือ Supplier ในไฟล์ต้นทาง จึงใช้ค่าเดียวที่ปรับได้ (ปัจจุบัน ' + CONFIG.leadTimeDays + ' วัน) แทนทั้งระบบ — Order By Date = วันนี้ + (Days Left − Lead Time) คือวันล่าสุดที่ควรสั่ง/เบิกเพื่อไม่ให้ของขาดก่อนของใหม่มาถึง ถ้า Days Left ≤ Lead Time ระบบจะขึ้น "สั่งวันนี้"</p>',
@@ -2664,7 +2669,7 @@
       '<p><b>Sales at Risk:</b> = Suggested Qty × ราคาขาย (Current Selling Price จาก Bird ถ้าไม่มีจะใช้ Original Price แทน) — คือโอกาสเสียยอดขายเป็นบาทถ้าไม่เติมสต็อก SKU นั้น SKU ที่ไม่มีราคาขายในไฟล์ Bird เลยจะไม่ถูกนับรวม (ไม่ใช่ 0) และจะถูกตั้งเป็น "Missing Price Data" ใน Data Quality แทน</p>',
       '<p><b>Family:</b> อ้างอิงจากข้อมูลจริงใน Bird Product Master (Brand Family) เท่านั้น หากไม่พบจะแสดง "UNMAPPED"</p>',
       '<p><b>Size-level Risk:</b> สินค้าที่มีบาง Size อยู่ระดับ Critical/Urgent (P0/P1) ขณะที่บาง Size ยังปกติ (P3/P4) จะขึ้นป้าย "⚠ Size Risk" ที่ตาราง Full Inventory และหน้ารายละเอียดสินค้า — สต็อกรวมของสินค้าที่ดูปกติ อาจซ่อน Size ที่ขายดีแต่ของหมดอยู่ก็ได้</p>',
-      '<p><b>Focus Watchlist / Restock ETA / สถานะการสั่ง / เพิ่มสินค้าหมดสต็อกเอง:</b> คลิก ⭐ ที่ SKU ที่คุณติดตามเป็นพิเศษ ระบบจะแจ้งเตือนในการ์ด Focus Watchlist ทันทีที่คุณอัปโหลดไฟล์และวิเคราะห์ใหม่ ส่วนวันที่คาดว่าจะเติมสต็อกและสถานะการสั่ง (รอดำเนินการ/สั่งแล้ว/ยืนยันแล้ว/ได้รับแล้ว) ที่กรอกไว้ในปุ่ม "สินค้าหมดสต็อกทุกช่องทาง" ก็เก็บไว้ในลักษณะเดียวกัน เป็นสถานะที่กำหนดเอง ไม่ได้คำนวณอัตโนมัติ — ในปุ่มนี้ยังพิมพ์/เลือก Product Code เพื่อดึงทุกไซส์/สีมาติ๊กเพิ่มเข้ารายการหมดสต็อกเองได้ด้วย เผื่อระบบยังตรวจไม่เจอจากตัวเลข TikTok/Bird อย่างเดียว — แต่เนื่องจากไฟล์นี้เป็นเว็บที่รันในเบราว์เซอร์ล้วนๆ ไม่มีเซิร์ฟเวอร์เบื้องหลัง จึงส่ง Push/LINE/อีเมลแจ้งเตือนตอนที่คุณไม่ได้เปิดไฟล์อยู่ไม่ได้ — ใช้ปุ่ม Export/Import Focus List & Restock ETA (.json) เพื่อเก็บทั้งหมดไว้ใช้ครั้งถัดไป หรือส่งให้ Claude ช่วยตรวจสอบแทนตามรอบที่ตั้งไว้</p>',
+      '<p><b>Focus Watchlist / Restock ETA / สถานะการสั่ง / เพิ่มสินค้าหมดสต็อกเอง:</b> คลิก ⭐ ที่ SKU ที่คุณติดตามเป็นพิเศษ ระบบจะแจ้งเตือนในการ์ด Focus Watchlist ทันทีที่คุณอัปโหลดไฟล์และวิเคราะห์ใหม่ ส่วนวันที่คาดว่าจะเติมสต็อกและสถานะการสั่ง (รอดำเนินการ/สั่งแล้ว/ยืนยันแล้ว/ได้รับแล้ว) ที่กรอกไว้ในปุ่ม "สินค้าหมดสต็อกทุกช่องทาง" ก็เก็บไว้ในลักษณะเดียวกัน เป็นสถานะที่กำหนดเอง ไม่ได้คำนวณอัตโนมัติ — ในปุ่มนี้ยังพิมพ์/เลือก Product Code เพื่อดึงทุกไซส์/สีมาติ๊กเพิ่มเข้ารายการหมดสต็อกเองได้ด้วย เผื่อระบบยังตรวจไม่เจอจากตัวเลข TikTok/Bird อย่างเดียว — เบราว์เซอร์นี้จำทั้งหมดนี้ไว้ให้อัตโนมัติข้ามการปิด/เปิดหน้าเว็บแล้ว แต่เนื่องจากไฟล์นี้เป็นเว็บที่รันในเบราว์เซอร์ล้วนๆ ไม่มีเซิร์ฟเวอร์เบื้องหลัง จึงส่ง Push/LINE/อีเมลแจ้งเตือนตอนที่คุณไม่ได้เปิดไฟล์อยู่ไม่ได้ — ใช้ปุ่ม Export/Import Focus List & Restock ETA (.json) เมื่อต้องการย้ายไปเครื่อง/เบราว์เซอร์อื่น หรือส่งให้ Claude ช่วยตรวจสอบแทนตามรอบที่ตั้งไว้</p>',
       (ttMap && ttMap.__stats && ttMap.__stats.dupSkuCount > 0 ?
         '<p><b>⚠ ข้อควรระวังคุณภาพข้อมูล:</b> พบแถวที่ SKU ผู้ขายซ้ำกันในไฟล์ TikTok ประมาณ ' + fmtInt(ttMap.__stats.dupSkuCount) + ' แถว (นับรวม Base SKU ที่ชนกันจากหลายไซส์/สี) — Snapshot History จะบันทึกตาม Seller SKU ที่แน่นอน หากมี Seller SKU ซ้ำกันเป๊ะ ระบบจะเก็บแค่ค่าล่าสุดต่อวันนั้น แนะนำให้ตรวจสอบไฟล์ต้นทางจาก TikTok Seller Center</p>' : ''),
     ].join('');
@@ -2822,6 +2827,7 @@
       runAnalysis();
       renderTopInfoLine();
       closeUploadModal();
+      persistState();
       btn.disabled = false; btn.textContent = 'วิเคราะห์ข้อมูล (วิเคราะห์ใหม่)';
     }
     function finishErr(err){
@@ -2851,6 +2857,10 @@
     rows = []; baseRows = []; familyRollup = [];
     renderTopInfoLine();
     checkReady();
+    // Persists the cleared baseRows too, but tryRestorePersistedState() restores Snapshot
+    // History/Focus annotations regardless of baseRows being empty -- so a reload after
+    // Reset correctly shows the upload prompt again without losing that history.
+    persistState();
   });
 
   /* ------------------------------ SNAPSHOT IMPORT/EXPORT ----------------------- */
@@ -2864,7 +2874,7 @@
       try {
         const obj = JSON.parse(e.target.result);
         const added = mergeImportedSnapshots(obj);
-        if (rows.length){ recomputeRows(); renderAll(); renderNotes(); }
+        if (rows.length){ recomputeRows(); renderAll(); renderNotes(); persistState(); }
         setStatus('โหลดประวัติ Snapshot สำเร็จ — เพิ่ม ' + fmtInt(added) + ' รายการ', 'ok');
       } catch(err){
         setStatus('โหลดไฟล์ Snapshot ไม่สำเร็จ: ไฟล์ไม่ถูกต้อง', 'err');
@@ -2885,7 +2895,7 @@
       try {
         const payload = JSON.parse(e.target.result);
         const added = mergeImportedFocusList(payload);
-        if (rows.length){ renderFocus(); renderCriticalActionPanels(); renderTodayTable(); renderMainTable(); }
+        if (rows.length){ renderFocus(); renderCriticalActionPanels(); renderTodayTable(); renderMainTable(); persistState(); }
         setStatus('โหลด Focus List สำเร็จ — เพิ่ม ' + fmtInt(added) + ' SKU', 'ok');
       } catch(err){
         setStatus('โหลดไฟล์ Focus List ไม่สำเร็จ: ไฟล์ไม่ถูกต้อง', 'err');
@@ -2941,6 +2951,82 @@
     });
   });
 
+  /* ------------------------------ BROWSER PERSISTENCE ----------------------------------- */
+  // Remembers the last successful analysis (+ Snapshot history + Focus/Restock annotations)
+  // in this browser's localStorage, so reloading the page — or coming back tomorrow —
+  // restores exactly where you left off instead of showing a blank "please upload" prompt
+  // every time. Scoped to this browser/profile only (localStorage never leaves the device,
+  // same as everything else this page does) — a different computer or a cleared browser
+  // starts fresh, same as before this existed.
+  const PERSIST_KEY = 'stockMonitorLastAnalysis_v1';
+  function persistState(){
+    try {
+      const payload = {
+        baseRows: baseRows,
+        snapshotStore: Array.from(snapshotStore.entries()),
+        snapshotRunLog: snapshotRunLog,
+        snapshotDateOverride: snapshotDateOverride,
+        focusedSkus: Array.from(focusedSkus),
+        restockEta: Array.from(restockEta.entries()),
+        restockStatus: Array.from(restockStatus.entries()),
+        manualStockedOut: Array.from(manualStockedOut),
+        ttMeta: ttMeta, birdMeta: birdMeta,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(PERSIST_KEY, JSON.stringify(payload));
+    } catch(e){
+      // Quota exceeded or localStorage unavailable (private browsing, etc.) — the analysis
+      // itself already succeeded, so this failing silently just means the next reload won't
+      // auto-restore; not worth interrupting the user's actual success message for.
+      console.error('persistState failed', e);
+    }
+  }
+  function tryRestorePersistedState(){
+    let raw;
+    try { raw = localStorage.getItem(PERSIST_KEY); } catch(e){ return false; }
+    if (!raw) return false;
+    let payload;
+    try { payload = JSON.parse(raw); } catch(e){ console.error('restore parse failed', e); return false; }
+    if (!payload) return false;
+
+    // Snapshot history and Focus/Restock annotations restore unconditionally, even if there's
+    // no current analysis to show (e.g. right after Reset, which intentionally clears baseRows
+    // but not these) -- they're meant to survive a Reset, and now that Reset itself calls
+    // persistState(), they need to survive a reload the same way or Reset would silently
+    // erase history the moment the page is refreshed.
+    snapshotStore = new Map(payload.snapshotStore || []);
+    snapshotRunLog = payload.snapshotRunLog || [];
+    focusedSkus = new Set(payload.focusedSkus || []);
+    restockEta = new Map(payload.restockEta || []);
+    restockStatus = new Map(payload.restockStatus || []);
+    manualStockedOut = new Set(payload.manualStockedOut || []);
+
+    if (!Array.isArray(payload.baseRows) || !payload.baseRows.length) return false;
+
+    baseRows = payload.baseRows;
+    snapshotDateOverride = payload.snapshotDateOverride || null;
+    ttMeta = payload.ttMeta || null;
+    birdMeta = payload.birdMeta || null;
+
+    recomputeRows();
+    renderAll();
+    renderNotes();
+    renderTopInfoLine();
+    if (ttMeta){
+      document.getElementById('dzTikTok').classList.add('loaded');
+      document.getElementById('dzTikTokFile').innerHTML = 'ไฟล์: <b>' + escapeHtml(ttMeta.name) + '</b>' + (ttMeta.embedded ? ' (ฝังไว้ล่วงหน้า)' : ' (บันทึกไว้ในเบราว์เซอร์นี้)');
+    }
+    if (birdMeta){
+      document.getElementById('dzBird').classList.add('loaded');
+      document.getElementById('dzBirdFile').innerHTML = 'ไฟล์: <b>' + escapeHtml(birdMeta.name) + '</b>' + (birdMeta.embedded ? ' (ฝังไว้ล่วงหน้า)' : ' (บันทึกไว้ในเบราว์เซอร์นี้)');
+    }
+    checkReady();
+    const savedAtText = payload.savedAt ? new Date(payload.savedAt).toLocaleString('th-TH', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit', year:'numeric' }) : '';
+    setStatus('โหลดข้อมูลล่าสุดที่บันทึกไว้ในเบราว์เซอร์นี้อัตโนมัติ' + (savedAtText ? ' (วิเคราะห์ล่าสุดเมื่อ ' + savedAtText + ')' : '') + ' — อัปโหลดไฟล์ใหม่เพื่อวิเคราะห์วันถัดไป', 'ok');
+    document.getElementById('resultsSection').style.display = 'block';
+    return true;
+  }
+
   /* ------------------------------ AUTO-LOAD EMBEDDED DATA ------------------------------ */
   // Daily static reports are generated by embedding that day's raw TikTok/Bird sheet data
   // (as plain aoa arrays — the exact shape XLSX.utils.sheet_to_json(...,{header:1}) would
@@ -2983,7 +3069,9 @@
     setStatus('รายงานประจำวันที่ ' + (meta.snapshotDate || '') + ' — โหลดข้อมูลที่ฝังไว้ล่วงหน้าอัตโนมัติ (ไม่ต้องอัปโหลดไฟล์) · ต้องการวิเคราะห์วันอื่นให้กดปุ่ม "อัปโหลด / วิเคราะห์ไฟล์" ด้านบนแทน', 'ok');
     document.getElementById('resultsSection').style.display = 'block';
   }
-  tryAutoLoadEmbeddedData();
+  // Prefer whatever this browser last analyzed (localStorage) over the embedded static
+  // report, since a returning user's own upload is more current than a baked-in snapshot.
+  if (!tryRestorePersistedState()) tryAutoLoadEmbeddedData();
 
 })();
 </script>
