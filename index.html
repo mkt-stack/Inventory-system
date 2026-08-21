@@ -306,14 +306,18 @@
 
   .top-info-line { font-size: 12px; color: var(--text-muted); margin: 6px 2px 18px; }
   .tab-bar-row { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:20px; }
-  .tab-bar { display:flex; gap:4px; border-bottom:1px solid var(--gridline); flex:1; min-width:0; overflow-x:auto; }
+  .tab-bar { display:flex; gap:6px; border-bottom:1px solid var(--gridline); flex:1; min-width:0; overflow-x:auto; }
   .tab-btn {
-    background:none; border:none; padding:10px 16px; font-size:13px; font-weight:600;
-    color:var(--text-secondary); cursor:pointer; border-bottom:2px solid transparent;
-    white-space:nowrap; font-family:inherit; flex-shrink:0;
+    background:none; border:none; padding:12px 20px; font-size:15px; font-weight:700;
+    color:var(--text-secondary); cursor:pointer; border-bottom:3px solid transparent;
+    white-space:nowrap; font-family:inherit; flex-shrink:0; border-radius:8px 8px 0 0;
+    transition: background .12s, color .12s;
   }
-  .tab-btn:hover { color:var(--text-primary); }
-  .tab-btn.active { color:var(--series-1); border-bottom-color:var(--series-1); }
+  .tab-btn:hover { color:var(--text-primary); background: var(--page-plane); }
+  .tab-btn.active {
+    color:var(--series-1); border-bottom-color:var(--series-1);
+    background: color-mix(in srgb, var(--series-1) 8%, transparent);
+  }
   .tab-panel { display:none; }
   .tab-panel.active { display:block; }
   .fab-upload {
@@ -387,6 +391,7 @@
               <th data-key="productCode">Product Code</th>
               <th data-key="productName">Product Name</th>
               <th data-key="family">Family</th>
+              <th data-key="sku">SKU</th>
               <th class="num" data-key="tiktokStock" title="จำนวนที่มี (พร้อมขาย) จากไฟล์ TikTok Seller Center ล่าสุด">TikTok</th>
               <th class="num" data-key="birdStock" title="จำนวนสต็อกออนไลน์ (NONL) จาก Bird ที่เบิกให้ TikTok ได้จริง — ถ้าไม่ใช่ตัวเลข แปลว่าข้อมูล Bird มีปัญหา ชี้เมาส์ที่ป้ายสถานะเพื่อดูรายละเอียด">Bird</th>
               <th class="num" data-key="birdNonl" title="Bird NONL — สต็อกออนไลน์ดิบจากไฟล์ Bird (ก่อนตีความสถานะ)">NONL</th>
@@ -2145,7 +2150,8 @@
     let list = getTodayFiltered();
     if (todaySortKey){
       list.sort(function(a,b){
-        let av=a[todaySortKey], bv=b[todaySortKey];
+        let av = todaySortKey==='sku' ? displaySku(a) : a[todaySortKey];
+        let bv = todaySortKey==='sku' ? displaySku(b) : b[todaySortKey];
         if (typeof av==='string' || typeof bv==='string'){
           av=norm(av).toUpperCase(); bv=norm(bv).toUpperCase();
           const c = av<bv?-1:(av>bv?1:0);
@@ -2173,6 +2179,7 @@
         '<td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||r.baseSku)+'</td>'+
         '<td class="strong truncate" title="'+escapeHtml(cleanProductName(r.productName, r.productCode)||'(ไม่มีชื่อ)')+'">'+escapeHtml(cleanProductName(r.productName, r.productCode)||'(ไม่มีชื่อ)')+'</td>'+
         '<td>'+escapeHtml(r.family||'—')+'</td>'+
+        '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
         '<td class="num">'+fmtInt(r.tiktokStock)+'</td>'+
         '<td class="num">'+(r.birdStatus==='OK'?fmtInt(r.birdStock):birdBadge(r.birdStatus, birdExtraLabel(r)))+'</td>'+
         '<td class="num">'+fmtInt(r.birdNonl)+'</td>'+
@@ -2646,10 +2653,10 @@
     downloadCsv(csv, 'tiktok_replenishment_full.csv');
   }
   function exportTodayCsv(){
-    const cols = ['Priority','Product Code','Product Name','Family','TikTok Stock','Bird Available','Bird NONL','Bird NOFF','Days Left','Est Daily Usage','Trend','Net Stock Change (Last 30d)','Suggested Qty','Final Qty','Sales at Risk','Order By','Recommendation'];
+    const cols = ['Priority','Product Code','Product Name','Family','SKU','TikTok Stock','Bird Available','Bird NONL','Bird NOFF','Days Left','Est Daily Usage','Trend','Net Stock Change (Last 30d)','Suggested Qty','Final Qty','Sales at Risk','Order By','Recommendation'];
     const list = sortByPriorityThenDays(getTodayFiltered());
     const csv = toCsv(cols, list, function(r){
-      return [r.priority, r.productCode, cleanProductName(r.productName,r.productCode), r.family, r.tiktokStock,
+      return [r.priority, r.productCode, cleanProductName(r.productName,r.productCode), r.family, displaySku(r), r.tiktokStock,
         r.birdStatus==='OK'?r.birdStock:r.birdStatus, r.birdNonl, r.birdNoff, r.daysLeft!==null?r.daysLeft.toFixed(2):'',
         r.usage!==null?r.usage.toFixed(2):'', r.trend||'', r.historyQtyText||'', r.suggestedQty, r.finalQty,
         r.salesAtRisk!==null?Math.round(r.salesAtRisk):'', r.orderByDate?fmtDate(r.orderByDate):'', r.recommendation];
