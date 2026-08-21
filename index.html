@@ -728,7 +728,7 @@
     <div class="modal-panel" style="max-width:1000px;">
       <div class="modal-head">
         <div>
-          <p class="modal-title">⚠️ SKU ที่หาไม่เจอใน Bird (ถูกตัดออกจากการวิเคราะห์)</p>
+          <p class="modal-title">⚠️ SKU ที่ถูกตัดออกจากการวิเคราะห์</p>
           <p class="modal-sub" id="excludedSkuModalSub"></p>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
@@ -736,11 +736,11 @@
           <button class="modal-close" id="excludedSkuModalClose" type="button">✕</button>
         </div>
       </div>
-      <p class="section-desc" style="margin-top:0;">SKU เหล่านี้มีอยู่ในไฟล์ TikTok แต่ระบบหาคู่ใน Bird ไม่เจอเลย (ไม่ใช่ Bird Stock = 0 — คือหา SKU นี้ในไฟล์ Bird ไม่พบเลย) จึงถูกตัดออกจากการวิเคราะห์ทั้งหมด — ถ้า SKU ไหนคุณเห็นในไฟล์ Bird จริงๆ ให้เทียบ "Seller SKU" / "Base SKU" / "Normalized" ด้านล่างกับคอลัมน์ Sku code ในไฟล์ Bird คำต่อคำ ปัญหาที่พบบ่อย: มีช่องว่าง/อักขระแฝงติดมาจากไฟล์ต้นทาง, บาร์โค้ดถูกเก็บเป็นตัวเลขในไฟล์หนึ่งแต่เป็นข้อความอีกไฟล์, หรือ SKU นี้ซ้ำกับ SKU อื่นในไฟล์ Bird เอง</p>
+      <p class="section-desc" style="margin-top:0;">SKU เหล่านี้มีอยู่ในไฟล์ TikTok แต่ถูกตัดออกจากการวิเคราะห์ทั้งหมดด้วยสาเหตุใดสาเหตุหนึ่ง: (1) <b>หาคู่ใน Bird ไม่เจอเลย</b> (ไม่ใช่ Bird Stock = 0 — คือหา SKU นี้ในไฟล์ Bird ไม่พบเลย) หรือ (2) <b>จำนวนที่มีในไฟล์ TikTok อ่านเป็นตัวเลขไม่ได้</b> (เช่น ช่องว่าง หรือค่าที่ไม่ใช่ตัวเลขเลย) — ดูคอลัมน์ "สาเหตุ" ด้านล่างว่าเป็นกรณีไหน ถ้าเป็นกรณี (1) และ SKU นั้นคุณเห็นในไฟล์ Bird จริงๆ ให้เทียบ "Seller SKU" / "Base SKU" / "Normalized" กับคอลัมน์ Sku code ในไฟล์ Bird คำต่อคำ ปัญหาที่พบบ่อย: มีช่องว่าง/อักขระแฝงติดมาจากไฟล์ต้นทาง, บาร์โค้ดถูกเก็บเป็นตัวเลขในไฟล์หนึ่งแต่เป็นข้อความอีกไฟล์, หรือ SKU นี้ซ้ำกับ SKU อื่นในไฟล์ Bird เอง</p>
       <div class="table-scroll" style="max-height:60vh; overflow-y:auto;">
         <table>
           <thead>
-            <tr><th>Product Name (TikTok)</th><th>Seller SKU</th><th>Base SKU</th><th title="ค่าที่ใช้เทียบจริง (ตัวพิมพ์ใหญ่ ตัดอักขระที่ไม่ใช่ตัวอักษร/ตัวเลขออก)">Normalized</th><th class="num">TikTok Stock</th></tr>
+            <tr><th>Product Name (TikTok)</th><th>Seller SKU</th><th>Base SKU</th><th title="ค่าที่ใช้เทียบจริง (ตัวพิมพ์ใหญ่ ตัดอักขระที่ไม่ใช่ตัวอักษร/ตัวเลขออก)">Normalized</th><th class="num">TikTok Stock</th><th>สาเหตุ</th></tr>
           </thead>
           <tbody id="excludedSkuModalTbody"></tbody>
         </table>
@@ -1203,6 +1203,18 @@
   }
 
   /* ------------------------------ PARSE TIKTOK ----------------------------- */
+  // Coerces a numeric-looking value (a real number, or text like "723" / "1,234") to a
+  // number; returns null for genuinely blank/non-numeric cells. Mirrors classifyBirdCell's
+  // string handling below so a quantity TikTok happens to export as text isn't silently
+  // treated as missing the way a strict `typeof === 'number'` check would.
+  function parseTtQty(raw){
+    if (typeof raw === 'number') return isFinite(raw) ? raw : null;
+    if (raw === null || raw === undefined) return null;
+    const s = String(raw).trim();
+    if (s === '') return null;
+    const cleaned = s.replace(/,/g,'');
+    return /^-?\d+(\.\d+)?$/.test(cleaned) ? Number(cleaned) : null;
+  }
   function parseTikTok(aoa){
     if (!aoa || !aoa.length) throw new Error('ไฟล์ TikTok Stock ว่างเปล่าหรืออ่านไม่ได้');
     let headerRowIdx = -1, header = null;
@@ -1220,6 +1232,7 @@
 
     const map = new Map();
     const list = [];
+    const skippedRows = [];
     let skippedNonNumeric = 0, missingNameCount = 0, dupSkuCount = 0;
 
     for (let r=headerRowIdx+1; r<aoa.length; r++){
@@ -1228,18 +1241,27 @@
       const sellerSku = norm(iSeller!==-1 ? row[iSeller] : '');
       if (!sellerSku) continue;
       const availRaw = iAvail!==-1 ? row[iAvail] : null;
-      if (typeof availRaw !== 'number'){ skippedNonNumeric++; continue; }
-      const lockedRaw = iLocked!==-1 ? row[iLocked] : null;
-      const totalRaw  = iTotal!==-1 ? row[iTotal] : null;
-
+      const available = parseTtQty(availRaw);
       const baseSku = sellerSku.replace(/_\d+$/,'');
       const productName = iName!==-1 ? norm(row[iName]) : '';
+      if (available === null){
+        skippedNonNumeric++;
+        skippedRows.push({
+          sellerSku, baseSku, productName,
+          rawAvailable: (availRaw===null||availRaw===undefined) ? '' : String(availRaw),
+        });
+        continue;
+      }
       if (!productName) missingNameCount++;
 
+      const lockedRaw = iLocked!==-1 ? row[iLocked] : null;
+      const totalRaw  = iTotal!==-1 ? row[iTotal] : null;
+      const locked = parseTtQty(lockedRaw);
+      const total = parseTtQty(totalRaw);
+
       const ttRow = {
-        sellerSku, baseSku, productName, available: availRaw,
-        locked: (typeof lockedRaw === 'number') ? lockedRaw : null,
-        total: (typeof totalRaw === 'number') ? totalRaw : availRaw,
+        sellerSku, baseSku, productName, available,
+        locked, total: total!==null ? total : available,
       };
       if (map.has(sellerSku) || map.has(baseSku)) dupSkuCount++;
       map.set(sellerSku, ttRow);
@@ -1247,6 +1269,7 @@
       list.push(ttRow);
     }
     map.__list = list;
+    map.__skippedRows = skippedRows;
     map.__stats = { skippedNonNumeric, missingNameCount, dupSkuCount, totalRows: list.length };
     return map;
   }
@@ -1595,7 +1618,17 @@
       // they're dropped from the analysis entirely rather than shown as a permanent "Not
       // Found" data-quality flag. The count is surfaced in setStatus/renderNotes so nothing
       // silently disappears.
-      excludedNotFoundRows = [];
+      // Rows TikTok's own file dropped before matching ever ran (quantity column not
+      // readable as a number) -- these never even reach findBirdMatch, so without folding
+      // them in here they'd stay invisible even in this same diagnostic list.
+      excludedNotFoundRows = (ttMap.__skippedRows || []).map(function(r){
+        return {
+          sellerSku: r.sellerSku, baseSku: r.baseSku,
+          normalizedSku: normalizeSku(r.sellerSku) || normalizeSku(r.baseSku),
+          productName: r.productName, tiktokStock: null,
+          reason: 'INVALID_QUANTITY', rawAvailable: r.rawAvailable,
+        };
+      });
       for (const ttRow of ttList){
         const birdRow = findBirdMatch(ttRow, birdMap, normBirdIdx);
         if (!birdRow){
@@ -1605,6 +1638,7 @@
             normalizedSku: normalizeSku(ttRow.sellerSku) || normalizeSku(ttRow.baseSku),
             productName: ttRow.productName,
             tiktokStock: ttRow.available,
+            reason: 'NO_BIRD_MATCH',
           });
           continue;
         }
@@ -1631,7 +1665,7 @@
       const capWarning = (ttList.length >= 4990 && ttList.length <= 5000)
         ? ' ⚠ จำนวนแถวใกล้เพดาน 5,000 ของ TikTok Export — ตรวจสอบว่าตรงกับจำนวน SKU ทั้งหมดใน Seller Center หรือไม่ ถ้าน้อยกว่าแสดงว่าไฟล์นี้ไม่ครบ'
         : '';
-      const excludedNote = excludedNotFoundCount>0 ? (' · ตัด ' + fmtInt(excludedNotFoundCount) + ' SKU ที่หาไม่เจอใน Bird ออกจากการวิเคราะห์') : '';
+      const excludedNote = excludedNotFoundCount>0 ? (' · ตัด ' + fmtInt(excludedNotFoundCount) + ' SKU ออกจากการวิเคราะห์ (ดูสาเหตุในแบนเนอร์ด้านบน)') : '';
       setStatus('วิเคราะห์สำเร็จ — TikTok ' + fmtInt(ttList.length) + ' SKU, Bird ' + fmtInt(birdMap.size) + ' SKU (Lookup), วิเคราะห์จริง ' + fmtInt(baseRows.length) + ' SKU' + excludedNote + capWarning, capWarning ? 'err' : 'ok');
       document.getElementById('resultsSection').style.display = 'block';
     } catch(err){
@@ -1835,12 +1869,16 @@
   // way to catch a real matching bug (stray whitespace, a barcode stored as text in one file
   // vs number in the other, a duplicate SKU elsewhere in Bird's sheet) instead of it silently
   // looking like the SKU just doesn't exist anywhere.
+  function excludedReasonLabel(r){
+    if (r.reason === 'INVALID_QUANTITY') return 'จำนวนใน TikTok อ่านเป็นตัวเลขไม่ได้ (ค่าดิบ: "' + (r.rawAvailable||'') + '")';
+    return 'หาคู่ใน Bird ไม่เจอ';
+  }
   function renderExcludedSkuBanner(){
     const el = document.getElementById('excludedSkuBanner');
     if (!el) return;
     if (!excludedNotFoundRows.length){ el.innerHTML = ''; return; }
     el.innerHTML = '<div class="alert-banner" style="background: color-mix(in srgb, var(--warning) 12%, var(--surface-1)); border-color: color-mix(in srgb, var(--warning) 35%, var(--border));">' +
-      '<div class="ai" style="color:#966600;">⚠️ <span class="n">' + fmtInt(excludedNotFoundRows.length) + '</span> SKU มีใน TikTok แต่หาไม่เจอใน Bird เลย ถูกตัดออกจากการวิเคราะห์ทั้งหมด</div>' +
+      '<div class="ai" style="color:#966600;">⚠️ <span class="n">' + fmtInt(excludedNotFoundRows.length) + '</span> SKU มีใน TikTok แต่ถูกตัดออกจากการวิเคราะห์ทั้งหมด (หาคู่ใน Bird ไม่เจอ หรือจำนวนอ่านเป็นตัวเลขไม่ได้)</div>' +
       '<button class="btn btn-ghost btn-sm" id="excludedSkuViewBtn" type="button">ดูรายการ</button>' +
       '</div>';
     document.getElementById('excludedSkuViewBtn').addEventListener('click', openExcludedSkuModal);
@@ -1852,8 +1890,9 @@
         '<td class="mono">'+escapeHtml(r.sellerSku)+'</td>'+
         '<td class="mono">'+escapeHtml(r.baseSku)+'</td>'+
         '<td class="mono">'+escapeHtml(r.normalizedSku||'—')+'</td>'+
-        '<td class="num">'+fmtInt(r.tiktokStock)+'</td></tr>';
-    }).join('') : '<tr><td colspan="5" class="focus-empty">ไม่มี SKU ที่ตัดออกในรอบนี้ 🎉</td></tr>';
+        '<td class="num">'+(r.tiktokStock==null?'—':fmtInt(r.tiktokStock))+'</td>'+
+        '<td>'+escapeHtml(excludedReasonLabel(r))+'</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="focus-empty">ไม่มี SKU ที่ตัดออกในรอบนี้ 🎉</td></tr>';
   }
   function openExcludedSkuModal(){
     renderExcludedSkuModalBody();
@@ -1861,11 +1900,11 @@
   }
   function closeExcludedSkuModal(){ document.getElementById('excludedSkuModalBackdrop').classList.remove('open'); }
   function exportExcludedSkuCsv(){
-    const cols = ['Product Name (TikTok)','Seller SKU','Base SKU','Normalized','TikTok Stock'];
+    const cols = ['Product Name (TikTok)','Seller SKU','Base SKU','Normalized','TikTok Stock','Reason'];
     const csv = toCsv(cols, excludedNotFoundRows, function(r){
-      return [r.productName, r.sellerSku, r.baseSku, r.normalizedSku, r.tiktokStock];
+      return [r.productName, r.sellerSku, r.baseSku, r.normalizedSku, r.tiktokStock, excludedReasonLabel(r)];
     });
-    downloadCsv(csv, 'excluded_not_found_in_bird.csv');
+    downloadCsv(csv, 'excluded_from_analysis.csv');
   }
   document.getElementById('excludedSkuModalClose').addEventListener('click', closeExcludedSkuModal);
   document.getElementById('excludedSkuExportBtn').addEventListener('click', exportExcludedSkuCsv);
@@ -2757,7 +2796,7 @@
   /* -------------------------------- NOTES ------------------------------------ */
   function renderNotes(){
     const html = [
-      '<p><b>ขอบเขตข้อมูล:</b> ระบบนี้ใช้ TikTok Seller Center เป็น Master Dataset — วิเคราะห์เฉพาะ SKU ที่มีอยู่ใน TikTok <b>และ</b> แมตช์เจอใน Bird เท่านั้น SKU ที่มีใน Bird แต่ไม่ได้ขายบน TikTok จะไม่ถูกนำมาแสดงหรือวิเคราะห์เลย และในทางกลับกัน SKU ที่มีบน TikTok แต่หาไม่เจอใน Bird เลยก็ถูกตัดออกจากการวิเคราะห์เช่นกัน เพราะไม่มีข้อมูลให้เบิกได้' +
+      '<p><b>ขอบเขตข้อมูล:</b> ระบบนี้ใช้ TikTok Seller Center เป็น Master Dataset — วิเคราะห์เฉพาะ SKU ที่มีอยู่ใน TikTok <b>และ</b> แมตช์เจอใน Bird เท่านั้น SKU ที่มีใน Bird แต่ไม่ได้ขายบน TikTok จะไม่ถูกนำมาแสดงหรือวิเคราะห์เลย และในทางกลับกัน SKU ที่มีบน TikTok แต่หาไม่เจอใน Bird เลย หรือมีจำนวนที่มีในไฟล์ TikTok ที่อ่านเป็นตัวเลขไม่ได้ ก็ถูกตัดออกจากการวิเคราะห์เช่นกัน เพราะไม่มีข้อมูลให้เบิกได้' +
         (baseRows && baseRows.__excludedNotFoundCount>0 ? ' — รอบล่าสุดตัดออกไป ' + fmtInt(baseRows.__excludedNotFoundCount) + ' SKU' : '') + '</p>',
       '<p><b>NONL / NOFF:</b> ในไฟล์ Bird คอลัมน์ NONL = จำนวนสต็อกออนไลน์ (ใช้เป็น Bird Available หลัก) และ NOFF = จำนวนสต็อกออฟไลน์/หน้าร้าน — ทั้งสองเป็นตัวเลขจริง ถ้า NONL เป็น 0 หรือว่างเปล่าแต่ NOFF มีของอยู่ ระบบจะขึ้นสถานะ "NOFF" หมายถึงของมีจริงแต่จัดสรรให้ออฟไลน์ ยังเบิกให้ TikTok ไม่ได้ทันที ส่วนค่าติดลบหรือค่าที่อ่านไม่ได้จาก Bird จะไม่ถูกนำมาคำนวณเป็น Stock = 0 หรือใช้วางแผนเบิกเด็ดขาด — ระบบจะขึ้นสถานะที่เกี่ยวข้องและแนะนำให้ตรวจสอบ Bird ก่อนเบิกเสมอ</p>',
       '<p><b>Estimated Daily Usage:</b> ประมาณจากอัตราการ<b>ลดลง</b>ของ TikTok Stock ระหว่าง Snapshot เท่านั้น (ไม่ใช่ยอดขายจริง เพราะอาจเกิดจาก Adjustment, Cancellation หรือแก้ไข Stock ได้) วันที่ Stock เพิ่มขึ้นจะถูกจัดเป็น "REPLENISHMENT EVENT" และไม่ถูกนำมาคำนวณ Usage เฉลี่ย</p>',
