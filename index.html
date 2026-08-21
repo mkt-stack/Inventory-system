@@ -347,6 +347,7 @@
 
     <div id="historicalModeBanner" style="margin-bottom:12px;"></div>
     <div id="alertBanner"></div>
+    <div id="excludedSkuBanner" style="margin-bottom:12px;"></div>
     <div class="top-info-line" id="topInfoLine"></div>
 
     <div class="tab-bar-row">
@@ -723,6 +724,30 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="excludedSkuModalBackdrop">
+    <div class="modal-panel" style="max-width:1000px;">
+      <div class="modal-head">
+        <div>
+          <p class="modal-title">⚠️ SKU ที่หาไม่เจอใน Bird (ถูกตัดออกจากการวิเคราะห์)</p>
+          <p class="modal-sub" id="excludedSkuModalSub"></p>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-ghost btn-sm" id="excludedSkuExportBtn" type="button">⬇ Export CSV</button>
+          <button class="modal-close" id="excludedSkuModalClose" type="button">✕</button>
+        </div>
+      </div>
+      <p class="section-desc" style="margin-top:0;">SKU เหล่านี้มีอยู่ในไฟล์ TikTok แต่ระบบหาคู่ใน Bird ไม่เจอเลย (ไม่ใช่ Bird Stock = 0 — คือหา SKU นี้ในไฟล์ Bird ไม่พบเลย) จึงถูกตัดออกจากการวิเคราะห์ทั้งหมด — ถ้า SKU ไหนคุณเห็นในไฟล์ Bird จริงๆ ให้เทียบ "Seller SKU" / "Base SKU" / "Normalized" ด้านล่างกับคอลัมน์ Sku code ในไฟล์ Bird คำต่อคำ ปัญหาที่พบบ่อย: มีช่องว่าง/อักขระแฝงติดมาจากไฟล์ต้นทาง, บาร์โค้ดถูกเก็บเป็นตัวเลขในไฟล์หนึ่งแต่เป็นข้อความอีกไฟล์, หรือ SKU นี้ซ้ำกับ SKU อื่นในไฟล์ Bird เอง</p>
+      <div class="table-scroll" style="max-height:60vh; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr><th>Product Name (TikTok)</th><th>Seller SKU</th><th>Base SKU</th><th title="ค่าที่ใช้เทียบจริง (ตัวพิมพ์ใหญ่ ตัดอักขระที่ไม่ใช่ตัวอักษร/ตัวเลขออก)">Normalized</th><th class="num">TikTok Stock</th></tr>
+          </thead>
+          <tbody id="excludedSkuModalTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="gapListModalBackdrop">
     <div class="modal-panel" style="max-width:1320px;">
       <div class="modal-head">
@@ -889,6 +914,7 @@
   let productMaster = new Map();
   let familyVocab = [];
   let baseRows = [];   // identity + Bird lookup, independent of snapshot history
+  let excludedNotFoundRows = []; // TikTok SKUs dropped this run because no Bird match was found — kept so it's inspectable, not just a count
   let rows = [];       // baseRows + usage/trend/priority/replenishment fields
   let snapshotDateOverride = null; // set by tryAutoLoadEmbeddedData() for static daily reports
   // Seller SKU -> count of rows sharing that exact code in the CURRENT TikTok file. When a
@@ -1569,13 +1595,23 @@
       // they're dropped from the analysis entirely rather than shown as a permanent "Not
       // Found" data-quality flag. The count is surfaced in setStatus/renderNotes so nothing
       // silently disappears.
-      let excludedNotFoundCount = 0;
+      excludedNotFoundRows = [];
       for (const ttRow of ttList){
         const birdRow = findBirdMatch(ttRow, birdMap, normBirdIdx);
-        if (!birdRow){ excludedNotFoundCount++; continue; }
+        if (!birdRow){
+          excludedNotFoundRows.push({
+            sellerSku: ttRow.sellerSku,
+            baseSku: ttRow.baseSku,
+            normalizedSku: normalizeSku(ttRow.sellerSku) || normalizeSku(ttRow.baseSku),
+            productName: ttRow.productName,
+            tiktokStock: ttRow.available,
+          });
+          continue;
+        }
         const masterInfo = getProductMasterInfo(birdRow, productMaster);
         bases.push(buildBaseRow(ttRow, birdRow, masterInfo));
       }
+      const excludedNotFoundCount = excludedNotFoundRows.length;
       bases.__excludedNotFoundCount = excludedNotFoundCount;
       baseRows = bases;
 
@@ -1680,6 +1716,7 @@
   function renderAll(){
     renderHistoricalModeBanner();
     renderAlertBanner();
+    renderExcludedSkuBanner();
     renderGapListPill();
     renderFocus();
     renderCriticalActionPanels();
@@ -1792,6 +1829,49 @@
       (totalSalesAtRisk>0 ? '<div class="ai">💸 <span class="n">'+fmtCurrency(totalSalesAtRisk)+'</span> โอกาสเสียยอดขายรวมถ้าไม่เติมสต็อกตามคำแนะนำ</div>' : '') +
       '</div>';
   }
+
+  /* ------------------------------ EXCLUDED (NOT FOUND IN BIRD) SKUs ----------------------- */
+  // These SKUs are dropped from every table/KPI in the app -- surfacing them here is the only
+  // way to catch a real matching bug (stray whitespace, a barcode stored as text in one file
+  // vs number in the other, a duplicate SKU elsewhere in Bird's sheet) instead of it silently
+  // looking like the SKU just doesn't exist anywhere.
+  function renderExcludedSkuBanner(){
+    const el = document.getElementById('excludedSkuBanner');
+    if (!el) return;
+    if (!excludedNotFoundRows.length){ el.innerHTML = ''; return; }
+    el.innerHTML = '<div class="alert-banner" style="background: color-mix(in srgb, var(--warning) 12%, var(--surface-1)); border-color: color-mix(in srgb, var(--warning) 35%, var(--border));">' +
+      '<div class="ai" style="color:#966600;">⚠️ <span class="n">' + fmtInt(excludedNotFoundRows.length) + '</span> SKU มีใน TikTok แต่หาไม่เจอใน Bird เลย ถูกตัดออกจากการวิเคราะห์ทั้งหมด</div>' +
+      '<button class="btn btn-ghost btn-sm" id="excludedSkuViewBtn" type="button">ดูรายการ</button>' +
+      '</div>';
+    document.getElementById('excludedSkuViewBtn').addEventListener('click', openExcludedSkuModal);
+  }
+  function renderExcludedSkuModalBody(){
+    document.getElementById('excludedSkuModalSub').textContent = fmtInt(excludedNotFoundRows.length) + ' SKU';
+    document.getElementById('excludedSkuModalTbody').innerHTML = excludedNotFoundRows.length ? excludedNotFoundRows.map(function(r){
+      return '<tr><td class="truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
+        '<td class="mono">'+escapeHtml(r.sellerSku)+'</td>'+
+        '<td class="mono">'+escapeHtml(r.baseSku)+'</td>'+
+        '<td class="mono">'+escapeHtml(r.normalizedSku||'—')+'</td>'+
+        '<td class="num">'+fmtInt(r.tiktokStock)+'</td></tr>';
+    }).join('') : '<tr><td colspan="5" class="focus-empty">ไม่มี SKU ที่ตัดออกในรอบนี้ 🎉</td></tr>';
+  }
+  function openExcludedSkuModal(){
+    renderExcludedSkuModalBody();
+    document.getElementById('excludedSkuModalBackdrop').classList.add('open');
+  }
+  function closeExcludedSkuModal(){ document.getElementById('excludedSkuModalBackdrop').classList.remove('open'); }
+  function exportExcludedSkuCsv(){
+    const cols = ['Product Name (TikTok)','Seller SKU','Base SKU','Normalized','TikTok Stock'];
+    const csv = toCsv(cols, excludedNotFoundRows, function(r){
+      return [r.productName, r.sellerSku, r.baseSku, r.normalizedSku, r.tiktokStock];
+    });
+    downloadCsv(csv, 'excluded_not_found_in_bird.csv');
+  }
+  document.getElementById('excludedSkuModalClose').addEventListener('click', closeExcludedSkuModal);
+  document.getElementById('excludedSkuExportBtn').addEventListener('click', exportExcludedSkuCsv);
+  document.getElementById('excludedSkuModalBackdrop').addEventListener('click', function(e){
+    if (e.target === document.getElementById('excludedSkuModalBackdrop')) closeExcludedSkuModal();
+  });
 
   /* ------------------------------ FOCUS WATCHLIST ----------------------------- */
   // In-app "pin & alert" for specific SKUs. This only fires when the user has the
@@ -2954,7 +3034,7 @@
     // Snapshot History is intentionally preserved across a reset — it is precious,
     // hard-to-rebuild cross-day data, and "clear all data" here means clearing the
     // current upload/analysis session, not erasing replenishment history.
-    rows = []; baseRows = []; familyRollup = [];
+    rows = []; baseRows = []; familyRollup = []; excludedNotFoundRows = [];
     renderTopInfoLine();
     checkReady();
     // Persists the cleared baseRows too, but tryRestorePersistedState() restores Snapshot
