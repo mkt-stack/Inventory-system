@@ -197,11 +197,16 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th {
     text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .3px;
-    color: var(--text-muted); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--gridline);
+    color: var(--text-secondary); font-weight: 700; padding: 10px 12px; border-bottom: 1px solid var(--gridline);
     white-space: nowrap; cursor: pointer; user-select: none;
     position: sticky; top: 0; background: var(--surface-1); z-index: 2;
   }
   thead th:hover { color: var(--text-primary); }
+  /* A header with a title attribute has a formula/explanation on hover — give it a visible
+     affordance (dotted underline in the brand color) so that's discoverable, not just a
+     browser default tooltip nobody thinks to try. */
+  thead th[title] { color: var(--series-1); text-decoration: underline dotted; text-underline-offset: 3px; }
+  thead th[title]:hover { color: var(--text-primary); text-decoration-color: var(--text-primary); }
   thead th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   tbody td { padding: 10px 12px; border-bottom: 1px solid var(--gridline); color: var(--text-secondary); vertical-align: middle; line-height: 1.45; }
   tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--page-plane) 55%, var(--surface-1)); }
@@ -262,8 +267,6 @@
   .spinner { width: 14px; height:14px; border-radius:50%; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; animation: spin .7s linear infinite; display:inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  th[data-tip] { position: relative; }
-  .th-tip { font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10.5px; color: var(--text-muted); display:block; white-space: normal; margin-top: 2px; }
 
   .modal-backdrop { display:none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 100; align-items: flex-start; justify-content:center; padding: 40px 16px; overflow-y:auto; }
   .modal-backdrop.open { display:flex; }
@@ -338,6 +341,7 @@
 
   <div id="resultsSection">
 
+    <div id="historicalModeBanner" style="margin-bottom:12px;"></div>
     <div id="alertBanner"></div>
     <div class="top-info-line" id="topInfoLine"></div>
 
@@ -379,20 +383,20 @@
           <thead>
             <tr>
               <th title="คลิก ⭐ เพื่อติดตาม SKU นี้ในการ์ด Focus Watchlist">⭐</th>
-              <th data-key="priority">Priority</th>
+              <th data-key="priority" title="จัดจาก Days Left: P0 ≤ 2 วัน, P1 ≤ 5 วัน, P2 ≤ Lead Time + Safety Days, P3 ≤ Target Cover, P4 มากกว่านั้น — Bird มีปัญหาข้อมูลจะเป็น Data Issue เสมอไม่ว่า Days Left เท่าไหร่">Priority</th>
               <th data-key="productCode">Product Code</th>
               <th data-key="productName">Product Name</th>
               <th data-key="family">Family</th>
-              <th class="num" data-key="tiktokStock">TikTok</th>
+              <th class="num" data-key="tiktokStock" title="จำนวนที่มี (พร้อมขาย) จากไฟล์ TikTok Seller Center ล่าสุด">TikTok</th>
               <th class="num" data-key="birdStock" title="จำนวนสต็อกออนไลน์ (NONL) จาก Bird ที่เบิกให้ TikTok ได้จริง — ถ้าไม่ใช่ตัวเลข แปลว่าข้อมูล Bird มีปัญหา ชี้เมาส์ที่ป้ายสถานะเพื่อดูรายละเอียด">Bird</th>
               <th class="num" data-key="birdNonl" title="Bird NONL — สต็อกออนไลน์ดิบจากไฟล์ Bird (ก่อนตีความสถานะ)">NONL</th>
               <th class="num" data-key="birdNoff" title="Bird NOFF — สต็อกออฟไลน์/หน้าร้านดิบจากไฟล์ Bird">NOFF</th>
-              <th class="num" data-key="daysLeft">Days Left</th>
+              <th class="num" data-key="daysLeft" title="= TikTok Stock ÷ Average/Day (หลังคูณ Campaign Multiplier ถ้าเปิดใช้)">Days Left</th>
               <th class="num" data-key="usage" title="ประมาณจากการลดลงของ TikTok Stock เฉลี่ยเท่ากับจำนวนวัน Snapshot ที่มีข้อมูลจริง (ชี้เมาส์ที่ค่าในแต่ละแถวเพื่อดูว่าคิดจากกี่วัน) — ไม่ใช่ยอดขายจริง">Average/Day</th>
-              <th data-key="trend">Trend</th>
+              <th data-key="trend" title="เทียบอัตราการลดลงของ TikTok Stock ช่วงหลังกับช่วงก่อนหน้าในประวัติที่มี">Trend</th>
               <th data-key="historyNetChange" title="ผลต่างสุทธิของสต็อก TikTok จาก Snapshot เก่าสุดถึงใหม่สุดในช่วงที่ติดตาม (เช่น -114 = ลดลง 114) — ชี้เมาส์เพื่อดูค่ารายวันทั้งหมด">Last30days</th>
-              <th class="num" data-key="suggestedQty">Suggested</th>
-              <th class="num" data-key="finalQty">Final</th>
+              <th class="num" data-key="suggestedQty" title="= MAX(Average/Day × (Target Cover + Safety Days) − TikTok Stock, 0)">Suggested</th>
+              <th class="num" data-key="finalQty" title="= MIN(Suggested Qty, Bird Available) — ถ้า Bird มีไม่พอ Final จะน้อยกว่า Suggested">Final</th>
               <th class="num" data-key="salesAtRisk" title="Suggested Qty × ราคาขาย — โอกาสเสียยอดขายถ้าไม่เติมสต็อก SKU นี้">Sales at Risk (฿)</th>
               <th data-key="orderByDate" title="วันล่าสุดที่ควรสั่ง/เบิก โดยคำนวณจาก Days Left − Lead Time">Order By</th>
               <th data-key="recommendation">Recommendation</th>
@@ -423,14 +427,14 @@
           <thead>
             <tr>
               <th>⭐</th>
-              <th data-key="priority">Priority</th>
+              <th data-key="priority" title="จัดจาก Days Left: P0 ≤ 2 วัน, P1 ≤ 5 วัน, P2 ≤ Lead Time + Safety Days, P3 ≤ Target Cover, P4 มากกว่านั้น — Bird มีปัญหาข้อมูลจะเป็น Data Issue เสมอไม่ว่า Days Left เท่าไหร่">Priority</th>
               <th data-key="productCode">Product Code</th>
               <th data-key="productName">Product Name</th>
               <th data-key="family">Family</th>
-              <th class="num" data-key="tiktokStock">TikTok</th>
-              <th class="num" data-key="birdStock">Bird</th>
-              <th class="num" data-key="daysLeft">Days Left</th>
-              <th data-key="trend">Trend</th>
+              <th class="num" data-key="tiktokStock" title="จำนวนที่มี (พร้อมขาย) จากไฟล์ TikTok Seller Center ล่าสุด">TikTok</th>
+              <th class="num" data-key="birdStock" title="จำนวนสต็อกออนไลน์ (NONL) จาก Bird ที่เบิกให้ TikTok ได้จริง">Bird</th>
+              <th class="num" data-key="daysLeft" title="= TikTok Stock ÷ Average/Day (หลังคูณ Campaign Multiplier ถ้าเปิดใช้)">Days Left</th>
+              <th data-key="trend" title="เทียบอัตราการลดลงของ TikTok Stock ช่วงหลังกับช่วงก่อนหน้าในประวัติที่มี">Trend</th>
               <th data-key="recommendation">Recommendation</th>
             </tr>
           </thead>
@@ -577,17 +581,17 @@
               <th class="num" data-key="birdNonl" title="Bird NONL — สต็อกออนไลน์ดิบจากไฟล์ Bird (ก่อนตีความสถานะ)">Bird NONL</th>
               <th class="num" data-key="birdNoff" title="Bird NOFF — สต็อกออฟไลน์/หน้าร้านดิบจากไฟล์ Bird">Bird NOFF</th>
               <th class="num" data-key="birdTotal" title="Bird Total = NONL + NOFF">Bird Total</th>
-              <th class="num" data-key="birdStock" title="จำนวนที่เบิกได้จริงจาก Bird Warehouse (จากคอลัมน์ Available Online Stock) — ถ้าไม่ใช่ตัวเลข ดูคำอธิบายที่คอลัมน์ Bird Status">Bird Available<span class="th-tip">จำนวนที่เบิกได้จาก Bird</span></th>
-              <th data-key="birdStatus" title="สถานะข้อมูลของ Bird สำหรับ SKU นี้ — ชี้เมาส์ที่ป้ายในตารางเพื่อดูความหมายของแต่ละสถานะ (OK / NONL / NOFF / NEGATIVE / BLANK)">Bird Status<span class="th-tip">ชี้เมาส์ที่ป้ายเพื่อดูความหมาย</span></th>
+              <th class="num" data-key="birdStock" title="จำนวนที่เบิกได้จริงจาก Bird Warehouse (จากคอลัมน์ Available Online Stock) — ถ้าไม่ใช่ตัวเลข ดูคำอธิบายที่คอลัมน์ Bird Status">Bird Available</th>
+              <th data-key="birdStatus" title="สถานะข้อมูลของ Bird สำหรับ SKU นี้ — ชี้เมาส์ที่ป้ายในตารางเพื่อดูความหมายของแต่ละสถานะ (OK / NONL / NOFF / NEGATIVE / BLANK)">Bird Status</th>
               <th class="num" data-key="dailyChange" title="TikTok Stock วันนี้ − TikTok Stock วันก่อนหน้า (snapshot ล่าสุด 2 วัน) — บวก = สต็อกเพิ่ม/เติมเข้า, ลบ = สต็อกลด/ขายออก">Daily Stock Change</th>
-              <th data-key="trend">Stock Trend</th>
-              <th class="num" data-key="usage" title="Estimated Daily Usage — ประมาณจากการลดลงของ TikTok Stock ไม่ใช่ยอดขายจริง">Est. Daily Usage<span class="th-tip">ไม่ใช่ยอดขายจริง</span></th>
-              <th class="num" data-key="daysLeft">Est. Days Left</th>
-              <th class="num" data-key="suggestedQty">Suggested Qty</th>
-              <th class="num" data-key="finalQty">Final Qty</th>
+              <th data-key="trend" title="เทียบอัตราการลดลงของ TikTok Stock ช่วงหลังกับช่วงก่อนหน้าในประวัติที่มี — Fast Declining / Declining / Stable / Slow Moving / Replenished">Stock Trend</th>
+              <th class="num" data-key="usage" title="Estimated Daily Usage — ประมาณจากการลดลงของ TikTok Stock เฉลี่ยเท่ากับจำนวนวัน Snapshot ที่มีข้อมูลจริง ไม่ใช่ยอดขายจริง">Est. Daily Usage</th>
+              <th class="num" data-key="daysLeft" title="= TikTok Stock ÷ Est. Daily Usage (หลังคูณ Campaign Multiplier ถ้าเปิดใช้)">Est. Days Left</th>
+              <th class="num" data-key="suggestedQty" title="= MAX(Est. Daily Usage × (Target Cover + Safety Days) − TikTok Stock, 0)">Suggested Qty</th>
+              <th class="num" data-key="finalQty" title="= MIN(Suggested Qty, Bird Available) — ถ้า Bird มีไม่พอ Final Qty จะน้อยกว่า Suggested Qty">Final Qty</th>
               <th class="num" data-key="salesAtRisk" title="Suggested Qty × ราคาขาย (Current/Original Selling Price จาก Bird) — โอกาสเสียยอดขายถ้าไม่เติมสต็อก SKU นี้">Sales at Risk (฿)</th>
-              <th data-key="replenishStatus">Replenishment Status</th>
-              <th data-key="priority">Priority</th>
+              <th data-key="replenishStatus" title="OK / Not Needed / Warehouse Stock Insufficient / Cannot Replenish / Insufficient Data — สรุปว่าเบิกได้เต็มจำนวนที่แนะนำหรือไม่">Replenishment Status</th>
+              <th data-key="priority" title="จัดจาก Est. Days Left: P0 ≤ 2 วัน, P1 ≤ 5 วัน, P2 ≤ Lead Time + Safety Days, P3 ≤ Target Cover, P4 มากกว่านั้น — Bird มีปัญหาข้อมูลจะเป็น Data Issue เสมอไม่ว่า Days Left เท่าไหร่">Priority</th>
             </tr>
           </thead>
           <tbody id="mainTbody"></tbody>
@@ -709,30 +713,6 @@
             </tr>
           </thead>
           <tbody id="pmVariants"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-backdrop" id="snapshotDateModalBackdrop">
-    <div class="modal-panel" style="max-width:900px;">
-      <div class="modal-head">
-        <div>
-          <p class="modal-title" id="snapshotDateModalTitle">📅 สต็อก TikTok ณ วันที่</p>
-          <p class="modal-sub" id="snapshotDateModalSub"></p>
-        </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <button class="btn btn-ghost btn-sm" id="snapshotDateExportBtn" type="button">⬇ Export CSV</button>
-          <button class="modal-close" id="snapshotDateModalClose" type="button">✕</button>
-        </div>
-      </div>
-      <p class="section-desc" style="margin-top:0;">แสดงเฉพาะจำนวนสต็อก TikTok ที่บันทึกไว้ของวันนี้ (จากประวัติ Snapshot ในเบราว์เซอร์ ไม่ต้องอัปโหลดไฟล์ใหม่) — ไม่รวม Bird/Suggested Qty/Priority ของวันนั้น เพราะระบบเก็บเฉพาะสต็อก TikTok รายวันเท่านั้น ข้อมูล Bird ที่เห็นในหน้าอื่นเป็นของไฟล์ล่าสุดที่วิเคราะห์เสมอ</p>
-      <div class="table-scroll" style="max-height:60vh; overflow-y:auto;">
-        <table>
-          <thead>
-            <tr><th>Product Code</th><th>Product Name</th><th>SKU</th><th>Family</th><th class="num">TikTok Stock</th></tr>
-          </thead>
-          <tbody id="snapshotDateModalTbody"></tbody>
         </table>
       </div>
     </div>
@@ -1693,6 +1673,7 @@
 
   /* -------------------------------- RENDER ------------------------------------ */
   function renderAll(){
+    renderHistoricalModeBanner();
     renderAlertBanner();
     renderGapListPill();
     renderFocus();
@@ -2710,75 +2691,85 @@
   function renderSnapshotTable(){
     document.getElementById('snapPill').textContent = fmtInt(snapshotRunLog.length) + ' วัน';
     document.getElementById('snapTbody').innerHTML = snapshotRunLog.slice().reverse().map(function(s){
-      return '<tr><td class="mono link-cell" data-date="'+escapeHtml(s.date)+'" title="ดูสต็อก TikTok รายวันของวันนี้ ไม่ต้องอัปโหลดไฟล์ใหม่">'+escapeHtml(s.date)+'</td><td class="num">'+fmtInt(s.skuCount)+'</td><td class="num">'+fmtInt(s.totalStock)+'</td></tr>';
+      const isCurrent = !viewingHistoricalDate && s.date===(snapshotDateOverride||'');
+      return '<tr'+(s.date===viewingHistoricalDate?' style="background:color-mix(in srgb, var(--series-1) 10%, transparent);"':'')+'>'+
+        '<td class="mono link-cell" data-date="'+escapeHtml(s.date)+'" title="ดูหน้าหลักย้อนหลังเป็นวันนี้ ไม่ต้องอัปโหลดไฟล์ใหม่">'+escapeHtml(s.date)+
+        (isCurrent?' <span class="badge info">ปัจจุบัน</span>':'')+
+        (s.date===viewingHistoricalDate?' <span class="badge warning">กำลังดูอยู่</span>':'')+'</td>'+
+        '<td class="num">'+fmtInt(s.skuCount)+'</td><td class="num">'+fmtInt(s.totalStock)+'</td></tr>';
     }).join('');
     Array.from(document.getElementById('snapTbody').querySelectorAll('.link-cell')).forEach(function(td){
-      td.addEventListener('click', function(){ openSnapshotDateModal(td.getAttribute('data-date')); });
+      td.addEventListener('click', function(){ viewHistoricalDate(td.getAttribute('data-date')); });
     });
   }
 
-  /* ------------------------------ SNAPSHOT DATE LOOKUP ------------------------------- */
-  // snapshotStore only ever recorded each SKU's TikTok stock QUANTITY per day, never a full
-  // day's Bird availability/pricing/Suggested Qty (those only ever exist for whichever file
-  // was most recently analyzed) -- so this can show "what was the stock on this date" from
-  // data already in the browser, but can't reconstruct that day's full dashboard. Includes
-  // SKUs delisted since (no longer in baseRows) with blank product info rather than dropping
-  // them, since their historical stock number is still real and worth seeing.
-  function getStockOnDate(dateStr){
-    const productBySku = new Map();
-    baseRows.forEach(function(b){ productBySku.set(b.sku, b); });
-    const results = [];
-    snapshotStore.forEach(function(hist, sku){
-      const entry = hist.find(function(h){ return h.date===dateStr; });
-      if (!entry) return;
-      const b = productBySku.get(sku);
-      results.push({
-        sku: sku,
-        productCode: b ? b.productCode : '',
-        productName: b ? cleanProductName(b.productName, b.productCode) : '(SKU นี้ไม่อยู่ในข้อมูลที่วิเคราะห์ล่าสุด)',
-        family: b ? b.family : '',
-        stock: entry.stock,
-      });
+  /* ------------------------------ HISTORICAL DATE VIEW ------------------------------- */
+  // snapshotStore only ever recorded each SKU's TikTok stock QUANTITY per day -- Bird
+  // availability/pricing/product master data were never versioned per day (only the most
+  // recently analyzed file's Bird data exists at all). So "viewing" a past date means:
+  // rebuild baseRows with each SKU's TikTok stock as of that date, and truncate snapshotStore
+  // itself to only dates <= that one so Usage/Trend/Suggested Qty/Priority are recomputed
+  // using only the history that would genuinely have existed on that day -- but Bird
+  // fields (availability, price, status) stay whatever the current/latest upload says,
+  // which the banner makes explicit rather than presenting as if it were also historical.
+  let latestBaseRows = null, latestSnapshotStore = null, latestSnapshotDateOverride = null;
+  let viewingHistoricalDate = null;
+  function truncateSnapshotStore(store, dateStr){
+    const truncated = new Map();
+    store.forEach(function(hist, sku){
+      const cut = hist.filter(function(h){ return h.date<=dateStr; });
+      if (cut.length) truncated.set(sku, cut);
     });
-    return results.sort(function(a,b){ return (a.productCode||'').localeCompare(b.productCode||'') || a.sku.localeCompare(b.sku); });
+    return truncated;
   }
-  function renderSnapshotDateModalBody(dateStr){
-    const list = getStockOnDate(dateStr);
-    document.getElementById('snapshotDateModalTitle').textContent = '📅 สต็อก TikTok ณ วันที่ ' + dateStr;
-    document.getElementById('snapshotDateModalSub').textContent = fmtInt(list.length) + ' SKU';
-    document.getElementById('snapshotDateModalTbody').innerHTML = list.length ? list.map(function(r){
-      return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
-        '<td class="truncate" title="'+escapeHtml(r.productName)+'">'+escapeHtml(r.productName)+'</td>'+
-        '<td class="mono">'+escapeHtml(r.sku)+'</td>'+
-        '<td>'+escapeHtml(r.family||'—')+'</td>'+
-        '<td class="num">'+fmtInt(r.stock)+'</td></tr>';
-    }).join('') : '<tr><td colspan="5" class="focus-empty">ไม่มีข้อมูลสต็อกของวันนี้</td></tr>';
-    Array.from(document.getElementById('snapshotDateModalTbody').querySelectorAll('.link-cell')).forEach(function(td){
-      const sku = td.getAttribute('data-sku');
-      if (!baseRows.some(function(b){ return b.sku===sku; })) return; // delisted SKU -- no current row to open
-      td.addEventListener('click', function(){ closeSnapshotDateModal(); openProductModal(sku); });
+  function viewHistoricalDate(dateStr){
+    if (!latestBaseRows){
+      latestBaseRows = baseRows;
+      latestSnapshotStore = snapshotStore;
+      latestSnapshotDateOverride = snapshotDateOverride;
+    }
+    const truncatedStore = truncateSnapshotStore(latestSnapshotStore, dateStr);
+    const historicalBaseRows = [];
+    latestBaseRows.forEach(function(b){
+      const hist = truncatedStore.get(b.sku);
+      if (!hist || !hist.length) return; // no data as of this date -- wasn't tracked yet, exclude
+      historicalBaseRows.push(Object.assign({}, b, { tiktokStock: hist[hist.length-1].stock }));
     });
+    snapshotStore = truncatedStore;
+    baseRows = historicalBaseRows;
+    snapshotDateOverride = dateStr;
+    viewingHistoricalDate = dateStr;
+    recomputeRows();
+    renderAll();
+    renderNotes();
+    renderTopInfoLine();
+    switchTab('today');
+    window.scrollTo({ top:0, behavior:'smooth' });
   }
-  let currentSnapshotDate = null;
-  function openSnapshotDateModal(dateStr){
-    currentSnapshotDate = dateStr;
-    renderSnapshotDateModalBody(dateStr);
-    document.getElementById('snapshotDateModalBackdrop').classList.add('open');
+  function returnToLatestView(){
+    if (!latestBaseRows) return;
+    baseRows = latestBaseRows;
+    snapshotStore = latestSnapshotStore;
+    snapshotDateOverride = latestSnapshotDateOverride;
+    latestBaseRows = null; latestSnapshotStore = null; latestSnapshotDateOverride = null;
+    viewingHistoricalDate = null;
+    recomputeRows();
+    renderAll();
+    renderNotes();
+    renderTopInfoLine();
   }
-  function closeSnapshotDateModal(){ document.getElementById('snapshotDateModalBackdrop').classList.remove('open'); }
-  function exportSnapshotDateCsv(){
-    if (!currentSnapshotDate) return;
-    const cols = ['Product Code','Product Name','SKU','Family','TikTok Stock'];
-    const csv = toCsv(cols, getStockOnDate(currentSnapshotDate), function(r){
-      return [r.productCode, r.productName, r.sku, r.family, r.stock];
-    });
-    downloadCsv(csv, 'tiktok_stock_' + currentSnapshotDate + '.csv');
+  function renderHistoricalModeBanner(){
+    const el = document.getElementById('historicalModeBanner');
+    if (!el) return;
+    if (!viewingHistoricalDate){ el.innerHTML = ''; return; }
+    el.innerHTML =
+      '<div class="alert-banner" style="background: color-mix(in srgb, var(--series-1) 12%, var(--surface-1)); border-color: color-mix(in srgb, var(--series-1) 35%, var(--border));">' +
+      '<div class="ai" style="color:var(--series-1);">🕐 กำลังดูข้อมูลย้อนหลังวันที่ ' + escapeHtml(viewingHistoricalDate) + '</div>' +
+      '<div style="font-size:12.5px; color:var(--text-secondary); flex:1; min-width:220px;">TikTok Stock เป็นค่าจริงของวันนั้น และ Suggested Qty/Priority คำนวณจากประวัติถึงวันนี้เท่านั้น — แต่ Bird / ราคา / จำนวนที่เบิกได้ เป็นข้อมูล<b>ปัจจุบัน</b> (ไม่ใช่ของวันนั้น เพราะไม่ได้เก็บ Bird รายวันไว้)</div>' +
+      '<button class="btn btn-primary btn-sm" id="returnToLatestBtn" type="button">← กลับไปข้อมูลล่าสุด</button>' +
+      '</div>';
+    document.getElementById('returnToLatestBtn').addEventListener('click', returnToLatestView);
   }
-  document.getElementById('snapshotDateModalClose').addEventListener('click', closeSnapshotDateModal);
-  document.getElementById('snapshotDateExportBtn').addEventListener('click', exportSnapshotDateCsv);
-  document.getElementById('snapshotDateModalBackdrop').addEventListener('click', function(e){
-    if (e.target === document.getElementById('snapshotDateModalBackdrop')) closeSnapshotDateModal();
-  });
 
   /* ------------------------------ UPLOAD / DROPZONE --------------------------- */
   function setStatus(msg, cls){
@@ -2900,6 +2891,10 @@
     if (!ttFile || !birdFile) return;
     if (isAnalyzing) return;
     isAnalyzing = true;
+    // A fresh analyze makes any in-progress historical view moot -- the new upload IS the
+    // latest now, so drop the saved "latest" pointer rather than leaving it stale.
+    latestBaseRows = null; latestSnapshotStore = null; latestSnapshotDateOverride = null;
+    viewingHistoricalDate = null;
     readConfigInputs();
     const btn = document.getElementById('analyzeBtn');
     btn.disabled = true;
@@ -3058,6 +3053,10 @@
   // starts fresh, same as before this existed.
   const PERSIST_KEY = 'stockMonitorLastAnalysis_v1';
   function persistState(){
+    // Never persist while looking at a reconstructed historical date -- baseRows/snapshotStore
+    // are temporarily swapped to that view and are not the real "latest" state; writing them
+    // here would corrupt what a reload restores.
+    if (viewingHistoricalDate) return;
     try {
       const payload = {
         baseRows: baseRows,
