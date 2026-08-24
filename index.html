@@ -398,7 +398,7 @@
               <th class="num" data-key="birdNonl" title="Bird NONL — สต็อกออนไลน์ดิบจากไฟล์ Bird (ก่อนตีความสถานะ)">NONL</th>
               <th class="num" data-key="birdNoff" title="Bird NOFF — สต็อกออฟไลน์/หน้าร้านดิบจากไฟล์ Bird">NOFF</th>
               <th class="num" data-key="daysLeft" title="= TikTok Stock ÷ Average/Day (หลังคูณ Campaign Multiplier ถ้าเปิดใช้)">Days Left</th>
-              <th class="num" data-key="usage" title="ประมาณจากการลดลงของ TikTok Stock เฉลี่ยเท่ากับจำนวนวัน Snapshot ที่มีข้อมูลจริง (ชี้เมาส์ที่ค่าในแต่ละแถวเพื่อดูว่าคิดจากกี่วัน) — ไม่ใช่ยอดขายจริง">Average/Day</th>
+              <th class="num" data-key="usage" title="ประมาณจากการลดลงของ TikTok Stock เฉลี่ยเท่ากับจำนวนวัน Snapshot ที่มีข้อมูลจริง (ชี้เมาส์ที่ค่าในแต่ละแถวเพื่อดูว่าคิดจากกี่วัน) — ไม่ใช่ยอดขายจริง ต้องมีช่วงที่สต็อกลดจริงอย่างน้อย 3 ครั้งถึงจะขึ้นตัวเลข ไม่งั้นจะขึ้น Insufficient History แทน เพื่อกันไม่ให้ค่าผิดปกติเพียงครั้งเดียวลากค่าเฉลี่ยเพี้ยน">Average/Day</th>
               <th data-key="trend" title="เทียบอัตราการลดลงของ TikTok Stock ช่วงหลังกับช่วงก่อนหน้าในประวัติที่มี">Trend</th>
               <th data-key="historyNetChange" title="ผลต่างสุทธิของสต็อก TikTok จาก Snapshot เก่าสุดถึงใหม่สุดในช่วงที่ติดตาม (เช่น -114 = ลดลง 114) — ชี้เมาส์เพื่อดูค่ารายวันทั้งหมด">Last30days</th>
               <th class="num" data-key="suggestedQty" title="= MAX(Average/Day × (Target Cover + Safety Days) − TikTok Stock, 0)">Suggested</th>
@@ -881,6 +881,11 @@
     p0Days: 2,                 // fixed boundary — Critical
     p1Days: 5,                 // fixed boundary — Urgent
     rollingWindowSnapshots: 30, // how many recent snapshots feed usage/trend/stockout-loss tracking
+    // A SKU with only 1-2 recorded stock-decrease events can have its whole Average/Day
+    // estimate dictated by a single outlier delta (e.g. a one-time stock write-off/delist
+    // reading as if it were a day's sales) -- require at least this many before trusting the
+    // average, same as any other "not enough data yet" case (see insufficientHistory).
+    minConsumptionEventsForUsage: 3,
     trend: { fastMultiplier: 1.3, slowMultiplier: 0.5, stableLow: 0.8, stableHigh: 1.2 },
   };
   // P2 boundary = Lead Time + Safety Days (textbook reorder-point logic) — kept as a function
@@ -1288,6 +1293,9 @@
     if (consumption.length===0){
       const trend = lastEventType==='REPLENISHMENT' ? 'REPLENISHED' : 'NO_MOVEMENT';
       return { usage:0, insufficientHistory:false, trend, lastEventType };
+    }
+    if (consumption.length < CONFIG.minConsumptionEventsForUsage){
+      return { usage:null, insufficientHistory:true, trend:null, lastEventType };
     }
     const usage = consumption.reduce((a,b)=>a+b,0)/consumption.length;
 
@@ -2760,7 +2768,7 @@
       '<p><b>ขอบเขตข้อมูล:</b> ระบบนี้ใช้ TikTok Seller Center เป็น Master Dataset — วิเคราะห์เฉพาะ SKU ที่มีอยู่ใน TikTok <b>และ</b> แมตช์เจอใน Bird เท่านั้น SKU ที่มีใน Bird แต่ไม่ได้ขายบน TikTok จะไม่ถูกนำมาแสดงหรือวิเคราะห์เลย และในทางกลับกัน SKU ที่มีบน TikTok แต่หาไม่เจอใน Bird เลยก็ถูกตัดออกจากการวิเคราะห์เช่นกัน เพราะไม่มีข้อมูลให้เบิกได้' +
         (baseRows && baseRows.__excludedNotFoundCount>0 ? ' — รอบล่าสุดตัดออกไป ' + fmtInt(baseRows.__excludedNotFoundCount) + ' SKU' : '') + '</p>',
       '<p><b>NONL / NOFF:</b> ในไฟล์ Bird คอลัมน์ NONL = จำนวนสต็อกออนไลน์ (ใช้เป็น Bird Available หลัก) และ NOFF = จำนวนสต็อกออฟไลน์/หน้าร้าน — ทั้งสองเป็นตัวเลขจริง ถ้า NONL เป็น 0 หรือว่างเปล่าแต่ NOFF มีของอยู่ ระบบจะขึ้นสถานะ "NOFF" หมายถึงของมีจริงแต่จัดสรรให้ออฟไลน์ ยังเบิกให้ TikTok ไม่ได้ทันที ส่วนค่าติดลบหรือค่าที่อ่านไม่ได้จาก Bird จะไม่ถูกนำมาคำนวณเป็น Stock = 0 หรือใช้วางแผนเบิกเด็ดขาด — ระบบจะขึ้นสถานะที่เกี่ยวข้องและแนะนำให้ตรวจสอบ Bird ก่อนเบิกเสมอ</p>',
-      '<p><b>Estimated Daily Usage:</b> ประมาณจากอัตราการ<b>ลดลง</b>ของ TikTok Stock ระหว่าง Snapshot เท่านั้น (ไม่ใช่ยอดขายจริง เพราะอาจเกิดจาก Adjustment, Cancellation หรือแก้ไข Stock ได้) วันที่ Stock เพิ่มขึ้นจะถูกจัดเป็น "REPLENISHMENT EVENT" และไม่ถูกนำมาคำนวณ Usage เฉลี่ย</p>',
+      '<p><b>Estimated Daily Usage:</b> ประมาณจากอัตราการ<b>ลดลง</b>ของ TikTok Stock ระหว่าง Snapshot เท่านั้น (ไม่ใช่ยอดขายจริง เพราะอาจเกิดจาก Adjustment, Cancellation หรือแก้ไข Stock ได้) วันที่ Stock เพิ่มขึ้นจะถูกจัดเป็น "REPLENISHMENT EVENT" และไม่ถูกนำมาคำนวณ Usage เฉลี่ย ต้องมีช่วงที่สต็อกลดจริงอย่างน้อย ' + CONFIG.minConsumptionEventsForUsage + ' ครั้งถึงจะคำนวณ Usage — ถ้าน้อยกว่านั้นจะขึ้น "Insufficient History" แทน เพื่อกันไม่ให้เหตุการณ์ผิดปกติครั้งเดียว (เช่น เลิกขาย/ปรับสต็อกครั้งใหญ่) ลากค่าเฉลี่ยให้เพี้ยน</p>',
       '<p><b>Snapshot History:</b> บันทึกทุกครั้งที่วิเคราะห์ โดยไม่เขียนทับวันก่อนหน้า ใช้ข้อมูลย้อนหลังสูงสุด ' + CONFIG.rollingWindowSnapshots + ' Snapshot ล่าสุดในการคำนวณ Usage/Trend หากมีประวัติน้อยกว่า 2 วัน จะแสดง "Insufficient History" — เบราว์เซอร์นี้จำประวัติไว้ให้อัตโนมัติ (localStorage) ข้ามการปิด/เปิดหน้าเว็บ ถ้าเปลี่ยนเครื่อง/เบราว์เซอร์ให้ Export Snapshot เก็บไว้แล้ว Import กลับมาที่เครื่องใหม่แทน</p>',
       '<p><b>Suggested / Final Replenishment:</b> Target Stock = Effective Daily Usage × (Target Cover + Safety Days) ปัจจุบันตั้งไว้ ' + CONFIG.targetCoverDays + ' + ' + CONFIG.safetyDays + ' วัน · Suggested Qty = MAX(Target Stock − TikTok Stock, 0) · Final Qty = MIN(Suggested Qty, Bird Available) — ถ้า Bird มีไม่พอจะขึ้นสถานะ "Warehouse Stock Insufficient" พร้อมจำนวนที่ขาด · Effective Daily Usage = Est. Daily Usage × Campaign Multiplier (ปกติคือ ×1 เท่ากับ Est. Daily Usage เดิม)</p>',
       '<p><b>Priority:</b> P0 ≤ ' + CONFIG.p0Days + ' วัน, P1 ≤ ' + CONFIG.p1Days + ' วัน, P2 ≤ ' + reorderTriggerDays() + ' วัน (= Lead Time ' + CONFIG.leadTimeDays + ' + Safety ' + CONFIG.safetyDays + ' วัน, Reorder Trigger), P3 ≤ ' + CONFIG.targetCoverDays + ' วัน (Target Cover), P4 มากกว่านั้น — SKU ที่ Bird มีปัญหาข้อมูลจะถูกจัดเป็น "Data Issue" เสมอ ไม่ว่า Days Left จะเท่าไหร่ เพราะเบิกจริงไม่ได้จนกว่าจะตรวจสอบ Bird ก่อน</p>',
