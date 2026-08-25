@@ -524,6 +524,8 @@
           <option value="negative">Negative Bird Stock</option>
           <option value="oddSku">Unexpected SKU Format</option>
           <option value="missingPrice">Missing Price Data</option>
+          <option value="nonlExceedsTiktok">NONL &gt; TikTok Stock</option>
+          <option value="nonlExceedsNoff">NONL &gt; NOFF</option>
         </select>
         <div class="spacer"></div>
         <button class="btn btn-ghost btn-sm" id="dqExportBtn" type="button">⬇ Export CSV</button>
@@ -886,6 +888,11 @@
     // reading as if it were a day's sales) -- require at least this many before trusting the
     // average, same as any other "not enough data yet" case (see insufficientHistory).
     minConsumptionEventsForUsage: 3,
+    // Small NONL-vs-TikTok / NONL-vs-NOFF gaps are routine sync lag, not a real Bird data
+    // problem -- most SKUs sit a few units apart just from normal timing. Only flag it in
+    // Data Quality once the gap is bigger than that (checked live against real data: the
+    // typical gap clusters around 6-21 units, so 10 filters most of that noise out).
+    nonlMismatchThreshold: 10,
     trend: { fastMultiplier: 1.3, slowMultiplier: 0.5, stableLow: 0.8, stableHigh: 1.2 },
   };
   // P2 boundary = Lead Time + Safety Days (textbook reorder-point logic) — kept as a function
@@ -1762,6 +1769,12 @@
       if (r.birdStatus==='NEGATIVE') issues.push('negative');
       if (!/^\d{8,14}(_\d+)?$/.test(r.sku)) issues.push('oddSku');
       if (r.birdStatus==='OK' && r.sellingPrice===null) issues.push('missingPrice');
+      // NONL is Bird's own record of online-allocated stock -- if it's higher than what
+      // TikTok is actually showing live, or higher than the offline (NOFF) allocation it's
+      // supposedly separate from, that's a reconciliation problem worth a human look, not
+      // something the replenishment math should silently trust as-is.
+      if (r.birdNonl!==null && (r.birdNonl - r.tiktokStock) > CONFIG.nonlMismatchThreshold) issues.push('nonlExceedsTiktok');
+      if (r.birdNonl!==null && r.birdNoff!==null && (r.birdNonl - r.birdNoff) > CONFIG.nonlMismatchThreshold) issues.push('nonlExceedsNoff');
       return { r, issues };
     }).filter(function(x){ return x.issues.length>0; });
   }
@@ -1769,6 +1782,7 @@
     dupSku:'Duplicate SKU', missingCode:'Missing Product Code',
     missingName:'Missing Product Name', missingColor:'Missing Color', missingSize:'Missing Size',
     negative:'Negative Bird Stock', oddSku:'Unexpected SKU Format', missingPrice:'Missing Price Data',
+    nonlExceedsTiktok:'NONL > TikTok Stock', nonlExceedsNoff:'NONL > NOFF',
   };
   function renderDataQuality(){
     dqRowsCache = computeDataQuality();
