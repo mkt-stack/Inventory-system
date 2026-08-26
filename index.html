@@ -657,11 +657,7 @@
       <div class="table-scroll" style="max-height:340px; overflow-y:auto;">
         <table>
           <thead>
-            <tr>
-              <th>Product Name</th><th>Product Code</th><th>Color</th><th>Size</th><th>SKU</th>
-              <th class="num">TikTok</th><th class="num">NONL</th><th class="num">NOFF</th>
-              <th class="num">NONL − TikTok</th><th class="num">NOFF − NONL</th>
-            </tr>
+            <tr id="nonlMismatchThead"></tr>
           </thead>
           <tbody id="nonlMismatchTbody"></tbody>
         </table>
@@ -1807,6 +1803,16 @@
   }
 
   /* ------------------------------ DATA QUALITY ------------------------------ */
+  // Shared by both Data Quality and NONL Mismatch tables: jump to Full Inventory with the
+  // search box already filtering to this exact SKU, so a flagged row can be seen in the full
+  // context of the main table rather than just this diagnostic list.
+  function jumpToInventorySku(sku){
+    filterText = sku;
+    document.getElementById('searchBox').value = sku;
+    page = 1; renderMainTable();
+    switchTab('inventory');
+    document.getElementById('mainTable').scrollIntoView({ behavior:'smooth', block:'start' });
+  }
   let dqIssueFilter = '';
   let dqRowsCache = [];
   function computeDataQuality(){
@@ -1845,12 +1851,15 @@
       const r = x.r;
       return '<tr><td class="mono">'+escapeHtml(r.productCode||'—')+'</td>'+
         '<td class="truncate" title="'+escapeHtml(r.productName||'')+'">'+escapeHtml(r.productName||'(ไม่มีชื่อ)')+'</td>'+
-        '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
+        '<td class="mono link-cell" data-sku="'+escapeHtml(displaySku(r))+'" title="ดู SKU นี้ในหน้า Full Inventory">'+escapeHtml(displaySku(r))+'</td>'+
         '<td>'+x.issues.map(function(i){ return '<span class="badge warning">'+DQ_LABELS[i]+'</span>'; }).join(' ')+'</td></tr>';
     }).join('');
     if (shown.length>300){
       document.getElementById('dqTbody').innerHTML += '<tr><td colspan="4" class="muted">...และอีก '+fmtInt(shown.length-300)+' รายการ — ใช้ Export CSV เพื่อดูทั้งหมด</td></tr>';
     }
+    Array.from(document.getElementById('dqTbody').querySelectorAll('.link-cell')).forEach(function(td){
+      td.addEventListener('click', function(){ jumpToInventorySku(td.getAttribute('data-sku')); });
+    });
   }
 
   /* ------------------------------ NONL MISMATCH ------------------------------ */
@@ -1883,6 +1892,12 @@
     document.getElementById('nonlMismatchCountPill').textContent = fmtInt(all.length) + ' SKU มีปัญหา';
     const shown = nonlMismatchFilter==='tiktok' ? all.filter(function(x){ return x.ttDiff!==null; }) :
       nonlMismatchFilter==='noff' ? all.filter(function(x){ return x.noffVsNonlDiff!==null; }) : all;
+    // Filtering to one specific condition only makes the OTHER condition's columns dead
+    // weight (always "—") -- show just the stock/diff columns that condition actually needs.
+    const cols = nonlMismatchColumns();
+    document.getElementById('nonlMismatchThead').innerHTML =
+      '<th>Product Name</th><th>Product Code</th><th>Color</th><th>Size</th><th>SKU</th>' +
+      cols.map(function(c){ return '<th class="num">'+c.label+'</th>'; }).join('');
     const capped = shown.slice(0, 300);
     document.getElementById('nonlMismatchTbody').innerHTML = capped.map(function(x){
       const r = x.r;
@@ -1891,26 +1906,46 @@
         '<td class="mono">'+escapeHtml(r.productCode||'—')+'</td>'+
         '<td>'+escapeHtml(r.color||'—')+'</td>'+
         '<td>'+escapeHtml(r.size||'—')+'</td>'+
-        '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
-        '<td class="num">'+fmtInt(r.tiktokStock)+'</td>'+
-        '<td class="num">'+(r.birdNonl!==null?fmtInt(r.birdNonl):'—')+'</td>'+
-        '<td class="num">'+(r.birdNoff!==null?fmtInt(r.birdNoff):'—')+'</td>'+
-        '<td class="num'+(x.ttDiff!==null?' rec-text warning':'')+'">'+(x.ttDiff!==null?('+'+fmtInt(x.ttDiff)):'—')+'</td>'+
-        '<td class="num'+(x.noffVsNonlDiff!==null?' rec-text warning':'')+'">'+(x.noffVsNonlDiff!==null?('+'+fmtInt(x.noffVsNonlDiff)):'—')+'</td></tr>';
+        '<td class="mono link-cell" data-sku="'+escapeHtml(displaySku(r))+'" title="ดู SKU นี้ในหน้า Full Inventory">'+escapeHtml(displaySku(r))+'</td>'+
+        cols.map(function(c){ return c.cell(r, x); }).join('') + '</tr>';
     }).join('');
     if (shown.length>300){
-      document.getElementById('nonlMismatchTbody').innerHTML += '<tr><td colspan="10" class="muted">...และอีก '+fmtInt(shown.length-300)+' รายการ — ใช้ Export CSV เพื่อดูทั้งหมด</td></tr>';
+      document.getElementById('nonlMismatchTbody').innerHTML += '<tr><td colspan="'+(5+cols.length)+'" class="muted">...และอีก '+fmtInt(shown.length-300)+' รายการ — ใช้ Export CSV เพื่อดูทั้งหมด</td></tr>';
     }
+    Array.from(document.getElementById('nonlMismatchTbody').querySelectorAll('.link-cell')).forEach(function(td){
+      td.addEventListener('click', function(){ jumpToInventorySku(td.getAttribute('data-sku')); });
+    });
+  }
+  // Which stock/diff columns to show, based on the active quick-filter -- 'all' shows every
+  // column, a single condition only shows the columns relevant to that comparison.
+  function nonlMismatchColumns(){
+    const tiktokCol = { label:'TikTok', cell:function(r){ return '<td class="num">'+fmtInt(r.tiktokStock)+'</td>'; } };
+    const nonlCol = { label:'NONL', cell:function(r){ return '<td class="num">'+(r.birdNonl!==null?fmtInt(r.birdNonl):'—')+'</td>'; } };
+    const noffCol = { label:'NOFF', cell:function(r){ return '<td class="num">'+(r.birdNoff!==null?fmtInt(r.birdNoff):'—')+'</td>'; } };
+    const ttDiffCol = { label:'NONL − TikTok', cell:function(r,x){ return '<td class="num'+(x.ttDiff!==null?' rec-text warning':'')+'">'+(x.ttDiff!==null?('+'+fmtInt(x.ttDiff)):'—')+'</td>'; } };
+    const noffDiffCol = { label:'NOFF − NONL', cell:function(r,x){ return '<td class="num'+(x.noffVsNonlDiff!==null?' rec-text warning':'')+'">'+(x.noffVsNonlDiff!==null?('+'+fmtInt(x.noffVsNonlDiff)):'—')+'</td>'; } };
+    if (nonlMismatchFilter==='tiktok') return [tiktokCol, nonlCol, ttDiffCol];
+    if (nonlMismatchFilter==='noff') return [noffCol, nonlCol, noffDiffCol];
+    return [tiktokCol, nonlCol, noffCol, ttDiffCol, noffDiffCol];
   }
   function exportNonlMismatchCsv(){
     const all = computeNonlMismatch();
     const shown = nonlMismatchFilter==='tiktok' ? all.filter(function(x){ return x.ttDiff!==null; }) :
       nonlMismatchFilter==='noff' ? all.filter(function(x){ return x.noffVsNonlDiff!==null; }) : all;
-    const cols = ['Product Name','Product Code','Color','Size','SKU','TikTok Stock','NONL','NOFF','NONL - TikTok','NOFF - NONL'];
+    const colDefs = {
+      tiktok: { label:'TikTok Stock', value:function(x){ return x.r.tiktokStock; } },
+      nonl: { label:'NONL', value:function(x){ return x.r.birdNonl; } },
+      noff: { label:'NOFF', value:function(x){ return x.r.birdNoff; } },
+      ttDiff: { label:'NONL - TikTok', value:function(x){ return x.ttDiff; } },
+      noffDiff: { label:'NOFF - NONL', value:function(x){ return x.noffVsNonlDiff; } },
+    };
+    const keys = nonlMismatchFilter==='tiktok' ? ['tiktok','nonl','ttDiff'] :
+      nonlMismatchFilter==='noff' ? ['noff','nonl','noffDiff'] : ['tiktok','nonl','noff','ttDiff','noffDiff'];
+    const cols = ['Product Name','Product Code','Color','Size','SKU'].concat(keys.map(function(k){ return colDefs[k].label; }));
     const csv = toCsv(cols, shown, function(x){
       const r = x.r;
-      return [cleanProductName(r.productName, r.productCode) || r.productName, r.productCode, r.color, r.size, displaySku(r),
-        r.tiktokStock, r.birdNonl, r.birdNoff, x.ttDiff, x.noffVsNonlDiff];
+      return [cleanProductName(r.productName, r.productCode) || r.productName, r.productCode, r.color, r.size, displaySku(r)]
+        .concat(keys.map(function(k){ return colDefs[k].value(x); }));
     });
     downloadCsv(csv, 'nonl_mismatch_'+fmtDate(new Date())+'.csv');
   }
