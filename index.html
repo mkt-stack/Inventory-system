@@ -300,6 +300,24 @@
   .gap-summary-card .v.critical { color: var(--critical); }
   .gap-summary-card .sub { font-size: 10.5px; color: var(--text-muted); margin-top: 3px; }
 
+  .nonl-tiles { display:flex; gap:12px; flex-wrap:wrap; }
+  .nonl-card {
+    flex: 1 1 200px; border-radius: 10px; padding: 12px 14px; cursor:pointer; text-align:left;
+    font-family: inherit; border: 1px solid var(--border); transition: border-color .12s, transform .12s, filter .12s;
+  }
+  .nonl-card:hover { transform: translateY(-1px); }
+  .nonl-card .k { font-size: 10.5px; text-transform: uppercase; letter-spacing:.3px; margin-bottom:5px; }
+  .nonl-card .v { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .nonl-card .sub { font-size: 10.5px; margin-top: 3px; }
+  .nonl-card.shade-a { background: color-mix(in srgb, var(--series-1) 10%, var(--page-plane)); border-color: color-mix(in srgb, var(--series-1) 40%, var(--border)); }
+  .nonl-card.shade-a .k, .nonl-card.shade-a .sub { color: color-mix(in srgb, var(--series-1) 65%, var(--text-muted)); }
+  .nonl-card.shade-a .v { color: var(--series-1); }
+  .nonl-card.shade-a.active { border-color: var(--series-1); background: color-mix(in srgb, var(--series-1) 20%, var(--page-plane)); }
+  .nonl-card.shade-b { background: #1c3f66; border-color: #1c3f66; }
+  .nonl-card.shade-b .k, .nonl-card.shade-b .sub { color: color-mix(in srgb, white 70%, #1c3f66); }
+  .nonl-card.shade-b .v { color: #fff; }
+  .nonl-card.shade-b.active { outline: 2px solid #1c3f66; outline-offset: 2px; filter: brightness(1.1); }
+
   tr.gap-row-critical td { background: color-mix(in srgb, var(--critical) 12%, var(--surface-1)) !important; }
   tr.gap-row-high td { background: color-mix(in srgb, var(--warning) 14%, var(--surface-1)) !important; }
   tr.gap-row-critical:hover td, tr.gap-row-high:hover td { filter: brightness(0.97); }
@@ -356,6 +374,7 @@
         <button class="tab-btn" data-tab="focus" type="button">⭐ Focus Watchlist</button>
         <button class="tab-btn" data-tab="overview" type="button">📊 Overview</button>
         <button class="tab-btn" data-tab="inventory" type="button">📋 Full Inventory</button>
+        <button class="tab-btn" data-tab="dataQuality" type="button">🩺 Data Quality</button>
         <button class="tab-btn" data-tab="history" type="button">🗂 History &amp; Notes</button>
       </div>
       <button class="btn btn-ghost btn-sm" id="gapListBtn" type="button">🔄 Compare Gap ≥ 10 <span class="count-pill" id="gapListCountPill">0</span></button>
@@ -508,62 +527,6 @@
         <div class="dz-meta" id="stockoutImpactNote" style="margin-top:8px;"></div>
       </div>
     </div>
-
-    <div class="card">
-      <h2 class="section-title">Data Quality <span class="count-pill" id="dqCountPill"></span></h2>
-      <p class="section-desc">ตรวจสอบปัญหาคุณภาพข้อมูลก่อนเชื่อคำแนะนำเบิกสต็อก — SKU ที่ติดปัญหาด้านล่างยังคงแสดงในตารางหลัก แต่ควรตรวจสอบก่อน</p>
-      <div class="tiles" id="tilesDataQuality"></div>
-      <div class="filter-bar" style="margin-top:12px;">
-        <select id="dqIssueFilter">
-          <option value="">แสดงปัญหา: ทั้งหมด</option>
-          <option value="dupSku">Duplicate SKU</option>
-          <option value="missingCode">Missing Product Code</option>
-          <option value="missingName">Missing Product Name</option>
-          <option value="missingColor">Missing Color</option>
-          <option value="missingSize">Missing Size</option>
-          <option value="negative">Negative Bird Stock</option>
-          <option value="oddSku">Unexpected SKU Format</option>
-          <option value="missingPrice">Missing Price Data</option>
-        </select>
-        <div class="spacer"></div>
-        <button class="btn btn-ghost btn-sm" id="dqExportBtn" type="button">⬇ Export CSV</button>
-      </div>
-      <div class="table-scroll" style="max-height:340px; overflow-y:auto;">
-        <table>
-          <thead>
-            <tr><th>Product Code</th><th>Product Name</th><th>SKU</th><th>Issue(s)</th></tr>
-          </thead>
-          <tbody id="dqTbody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2 class="section-title">NONL Mismatch <span class="count-pill" id="nonlMismatchCountPill"></span></h2>
-      <p class="section-desc" id="nonlMismatchDesc"></p>
-      <div class="tiles" id="tilesNonlMismatch"></div>
-      <div class="filter-bar" style="margin-top:12px;">
-        <select id="nonlMismatchFilter">
-          <option value="">แสดง: ทั้งหมด</option>
-          <option value="tiktok">NONL &gt; TikTok Stock เท่านั้น</option>
-          <option value="noff">NONL &gt; NOFF เท่านั้น</option>
-        </select>
-        <div class="spacer"></div>
-        <button class="btn btn-ghost btn-sm" id="nonlMismatchExportBtn" type="button">⬇ Export CSV</button>
-      </div>
-      <div class="table-scroll" style="max-height:340px; overflow-y:auto;">
-        <table>
-          <thead>
-            <tr>
-              <th>Product Name</th><th>Product Code</th><th>Color</th><th>Size</th><th>SKU</th>
-              <th class="num">TikTok</th><th class="num">NONL</th><th class="num">NOFF</th>
-              <th class="num">NONL − TikTok</th><th class="num">NONL − NOFF</th>
-            </tr>
-          </thead>
-          <tbody id="nonlMismatchTbody"></tbody>
-        </table>
-      </div>
-    </div>
     </div>
 
     <div class="tab-panel" data-tab="inventory">
@@ -638,6 +601,70 @@
           <button id="pgNext">ถัดไป ›</button>
           <button id="pgLast">สุดท้าย »</button>
         </div>
+      </div>
+    </div>
+    </div>
+
+    <div class="tab-panel" data-tab="dataQuality">
+    <div class="card">
+      <h2 class="section-title">Data Quality <span class="count-pill" id="dqCountPill"></span></h2>
+      <p class="section-desc">ตรวจสอบปัญหาคุณภาพข้อมูลก่อนเชื่อคำแนะนำเบิกสต็อก — SKU ที่ติดปัญหาด้านล่างยังคงแสดงในตารางหลัก แต่ควรตรวจสอบก่อน</p>
+      <div class="tiles" id="tilesDataQuality"></div>
+      <div class="filter-bar" style="margin-top:12px;">
+        <select id="dqIssueFilter">
+          <option value="">แสดงปัญหา: ทั้งหมด</option>
+          <option value="dupSku">Duplicate SKU</option>
+          <option value="missingCode">Missing Product Code</option>
+          <option value="missingName">Missing Product Name</option>
+          <option value="missingColor">Missing Color</option>
+          <option value="missingSize">Missing Size</option>
+          <option value="negative">Negative Bird Stock</option>
+          <option value="oddSku">Unexpected SKU Format</option>
+          <option value="missingPrice">Missing Price Data</option>
+        </select>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost btn-sm" id="dqExportBtn" type="button">⬇ Export CSV</button>
+      </div>
+      <div class="table-scroll" style="max-height:340px; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr><th>Product Code</th><th>Product Name</th><th>SKU</th><th>Issue(s)</th></tr>
+          </thead>
+          <tbody id="dqTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">NONL Mismatch <span class="count-pill" id="nonlMismatchCountPill"></span></h2>
+      <p class="section-desc" id="nonlMismatchDesc"></p>
+      <div class="tiles nonl-tiles">
+        <button type="button" class="nonl-card shade-a" id="nonlMismatchBtnTiktok" data-quick="tiktok">
+          <div class="k">NONL &gt; TikTok Stock</div>
+          <div class="v" id="nonlMismatchValTiktok">—</div>
+          <div class="sub">คลิกเพื่อดูเฉพาะกรณีนี้</div>
+        </button>
+        <button type="button" class="nonl-card shade-b" id="nonlMismatchBtnNoff" data-quick="noff">
+          <div class="k">NOFF &gt; NONL</div>
+          <div class="v" id="nonlMismatchValNoff">—</div>
+          <div class="sub">คลิกเพื่อดูเฉพาะกรณีนี้</div>
+        </button>
+      </div>
+      <div class="filter-bar" style="margin-top:12px;">
+        <div class="spacer"></div>
+        <button class="btn btn-ghost btn-sm" id="nonlMismatchExportBtn" type="button">⬇ Export CSV</button>
+      </div>
+      <div class="table-scroll" style="max-height:340px; overflow-y:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Product Name</th><th>Product Code</th><th>Color</th><th>Size</th><th>SKU</th>
+              <th class="num">TikTok</th><th class="num">NONL</th><th class="num">NOFF</th>
+              <th class="num">NONL − TikTok</th><th class="num">NOFF − NONL</th>
+            </tr>
+          </thead>
+          <tbody id="nonlMismatchTbody"></tbody>
+        </table>
       </div>
     </div>
     </div>
@@ -1827,34 +1854,35 @@
   }
 
   /* ------------------------------ NONL MISMATCH ------------------------------ */
-  // Split out from Data Quality into its own section: NONL is Bird's own record of
+  // Split out from Data Quality into its own section/tab: NONL is Bird's own record of
   // online-allocated stock -- if it's higher than what TikTok is actually showing live, or
-  // higher than the offline (NOFF) allocation it's supposedly separate from, that's a
-  // reconciliation problem worth a human look, not something replenishment math should trust
-  // silently. Gated behind CONFIG.nonlMismatchThreshold since small gaps are routine sync lag
-  // (checked against real data: ungated this trips on ~50-77% of all SKUs).
+  // lower than the offline (NOFF) allocation (most of the stock sitting offline, potentially
+  // under-allocated to the online channel), that's a reconciliation problem worth a human
+  // look, not something replenishment math should trust silently. Gated behind
+  // CONFIG.nonlMismatchThreshold since small gaps are routine sync lag (checked against real
+  // data: ungated this trips on ~50-77% of all SKUs).
   let nonlMismatchFilter = '';
   function computeNonlMismatch(){
     return rows.map(function(r){
       const ttDiff = (r.birdNonl!==null && (r.birdNonl - r.tiktokStock) > CONFIG.nonlMismatchThreshold) ? (r.birdNonl - r.tiktokStock) : null;
-      const noffDiff = (r.birdNonl!==null && r.birdNoff!==null && (r.birdNonl - r.birdNoff) > CONFIG.nonlMismatchThreshold) ? (r.birdNonl - r.birdNoff) : null;
-      return { r, ttDiff, noffDiff };
-    }).filter(function(x){ return x.ttDiff!==null || x.noffDiff!==null; })
-      .sort(function(a,b){ return Math.max(b.ttDiff||0,b.noffDiff||0) - Math.max(a.ttDiff||0,a.noffDiff||0); });
+      const noffVsNonlDiff = (r.birdNonl!==null && r.birdNoff!==null && (r.birdNoff - r.birdNonl) > CONFIG.nonlMismatchThreshold) ? (r.birdNoff - r.birdNonl) : null;
+      return { r, ttDiff, noffVsNonlDiff };
+    }).filter(function(x){ return x.ttDiff!==null || x.noffVsNonlDiff!==null; })
+      .sort(function(a,b){ return Math.max(b.ttDiff||0,b.noffVsNonlDiff||0) - Math.max(a.ttDiff||0,a.noffVsNonlDiff||0); });
   }
   function renderNonlMismatch(){
     const all = computeNonlMismatch();
     document.getElementById('nonlMismatchDesc').textContent =
-      'สต็อกออนไลน์ (NONL) จาก Bird สูงกว่าที่ TikTok แสดงจริง หรือสูงกว่าสต็อกออฟไลน์ (NOFF) เกิน ' + fmtInt(CONFIG.nonlMismatchThreshold) + ' หน่วย — SKU ที่ติดปัญหายังคงแสดงในตารางหลัก แต่ควรตรวจสอบก่อนเชื่อคำแนะนำเบิก';
+      'สต็อกออนไลน์ (NONL) จาก Bird สูงกว่าที่ TikTok แสดงจริง หรือสต็อกออฟไลน์ (NOFF) สูงกว่า NONL เกิน ' + fmtInt(CONFIG.nonlMismatchThreshold) + ' หน่วย — SKU ที่ติดปัญหายังคงแสดงในตารางหลัก แต่ควรตรวจสอบก่อนเชื่อคำแนะนำเบิก · คลิกการ์ดด้านล่างเพื่อกรองเฉพาะกรณีนั้น';
     const ttCount = all.filter(function(x){ return x.ttDiff!==null; }).length;
-    const noffCount = all.filter(function(x){ return x.noffDiff!==null; }).length;
-    document.getElementById('tilesNonlMismatch').innerHTML = [
-      tileHtml({ lbl:'NONL > TikTok Stock', val: fmtInt(ttCount), accent: ttCount>0?'warning':'' }),
-      tileHtml({ lbl:'NONL > NOFF', val: fmtInt(noffCount), accent: noffCount>0?'warning':'' }),
-    ].join('');
+    const noffCount = all.filter(function(x){ return x.noffVsNonlDiff!==null; }).length;
+    document.getElementById('nonlMismatchValTiktok').textContent = fmtInt(ttCount);
+    document.getElementById('nonlMismatchValNoff').textContent = fmtInt(noffCount);
+    document.getElementById('nonlMismatchBtnTiktok').classList.toggle('active', nonlMismatchFilter==='tiktok');
+    document.getElementById('nonlMismatchBtnNoff').classList.toggle('active', nonlMismatchFilter==='noff');
     document.getElementById('nonlMismatchCountPill').textContent = fmtInt(all.length) + ' SKU มีปัญหา';
     const shown = nonlMismatchFilter==='tiktok' ? all.filter(function(x){ return x.ttDiff!==null; }) :
-      nonlMismatchFilter==='noff' ? all.filter(function(x){ return x.noffDiff!==null; }) : all;
+      nonlMismatchFilter==='noff' ? all.filter(function(x){ return x.noffVsNonlDiff!==null; }) : all;
     const capped = shown.slice(0, 300);
     document.getElementById('nonlMismatchTbody').innerHTML = capped.map(function(x){
       const r = x.r;
@@ -1868,7 +1896,7 @@
         '<td class="num">'+(r.birdNonl!==null?fmtInt(r.birdNonl):'—')+'</td>'+
         '<td class="num">'+(r.birdNoff!==null?fmtInt(r.birdNoff):'—')+'</td>'+
         '<td class="num'+(x.ttDiff!==null?' rec-text warning':'')+'">'+(x.ttDiff!==null?('+'+fmtInt(x.ttDiff)):'—')+'</td>'+
-        '<td class="num'+(x.noffDiff!==null?' rec-text warning':'')+'">'+(x.noffDiff!==null?('+'+fmtInt(x.noffDiff)):'—')+'</td></tr>';
+        '<td class="num'+(x.noffVsNonlDiff!==null?' rec-text warning':'')+'">'+(x.noffVsNonlDiff!==null?('+'+fmtInt(x.noffVsNonlDiff)):'—')+'</td></tr>';
     }).join('');
     if (shown.length>300){
       document.getElementById('nonlMismatchTbody').innerHTML += '<tr><td colspan="10" class="muted">...และอีก '+fmtInt(shown.length-300)+' รายการ — ใช้ Export CSV เพื่อดูทั้งหมด</td></tr>';
@@ -1877,12 +1905,12 @@
   function exportNonlMismatchCsv(){
     const all = computeNonlMismatch();
     const shown = nonlMismatchFilter==='tiktok' ? all.filter(function(x){ return x.ttDiff!==null; }) :
-      nonlMismatchFilter==='noff' ? all.filter(function(x){ return x.noffDiff!==null; }) : all;
-    const cols = ['Product Name','Product Code','Color','Size','SKU','TikTok Stock','NONL','NOFF','NONL - TikTok','NONL - NOFF'];
+      nonlMismatchFilter==='noff' ? all.filter(function(x){ return x.noffVsNonlDiff!==null; }) : all;
+    const cols = ['Product Name','Product Code','Color','Size','SKU','TikTok Stock','NONL','NOFF','NONL - TikTok','NOFF - NONL'];
     const csv = toCsv(cols, shown, function(x){
       const r = x.r;
       return [cleanProductName(r.productName, r.productCode) || r.productName, r.productCode, r.color, r.size, displaySku(r),
-        r.tiktokStock, r.birdNonl, r.birdNoff, x.ttDiff, x.noffDiff];
+        r.tiktokStock, r.birdNonl, r.birdNoff, x.ttDiff, x.noffVsNonlDiff];
     });
     downloadCsv(csv, 'nonl_mismatch_'+fmtDate(new Date())+'.csv');
   }
@@ -3215,7 +3243,13 @@
   document.getElementById('exportBtn').addEventListener('click', exportCsv);
   document.getElementById('dqIssueFilter').addEventListener('change', function(){ dqIssueFilter=this.value; renderDataQuality(); });
   document.getElementById('dqExportBtn').addEventListener('click', exportDataQualityCsv);
-  document.getElementById('nonlMismatchFilter').addEventListener('change', function(){ nonlMismatchFilter=this.value; renderNonlMismatch(); });
+  Array.from(document.querySelectorAll('.nonl-card')).forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const key = btn.getAttribute('data-quick');
+      nonlMismatchFilter = (nonlMismatchFilter === key) ? '' : key;
+      renderNonlMismatch();
+    });
+  });
   document.getElementById('nonlMismatchExportBtn').addEventListener('click', exportNonlMismatchCsv);
   document.getElementById('exportDailySnapshotBtn').addEventListener('click', exportDailySnapshotCsv);
   document.getElementById('pgFirst').addEventListener('click', function(){ page=1; renderMainTable(); });
