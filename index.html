@@ -1323,6 +1323,16 @@
         locked: (typeof lockedRaw === 'number') ? lockedRaw : null,
         total: (typeof totalRaw === 'number') ? totalRaw : availRaw,
       };
+      // A source file can legitimately list the exact same Seller SKU row twice (e.g. a
+      // copy-paste error in TikTok's own export) -- if every field matches the row already
+      // seen for this SKU, it's a true redundant duplicate, not a real data conflict, so drop
+      // it silently instead of creating two identical rows downstream. Only rows that share a
+      // SKU but DISAGREE on the numbers are real duplicates worth flagging in Data Quality.
+      const existing = map.get(sellerSku);
+      if (existing && existing.productName===productName && existing.available===ttRow.available &&
+          existing.locked===ttRow.locked && existing.total===ttRow.total){
+        continue;
+      }
       if (map.has(sellerSku) || map.has(baseSku)) dupSkuCount++;
       map.set(sellerSku, ttRow);
       if (!map.has(baseSku)) map.set(baseSku, ttRow);
@@ -2021,7 +2031,7 @@
 
   function renderAlertBanner(){
     const p0 = rows.filter(r=>r.priority==='P0').length;
-    const dataIssue = rows.filter(r=>r.priority==='DATA_ISSUE').length;
+    const dataIssue = computeDataIssueRows().length;
     const totalSalesAtRisk = rows.reduce((s,r)=> s + (r.salesAtRisk||0), 0);
     const el = document.getElementById('alertBanner');
     const campaignNote = campaignMultiplier!==1 ?
@@ -2040,7 +2050,11 @@
 
   /* ------------------------------ DATA ISSUE MODAL ------------------------------ */
   function computeDataIssueRows(){
-    return rows.filter(function(r){ return r.priority==='DATA_ISSUE'; });
+    // A SKU that's out of stock everywhere (TikTok=0 and Bird NONL+NOFF=0) is already handled
+    // by the dedicated "สินค้าหมดสต็อกทุกช่องทาง" list -- showing it here too is redundant and
+    // just adds noise to a list that's supposed to mean "check the Bird data before trusting
+    // it," not "this SKU has zero stock everywhere" (a different, more specific situation).
+    return rows.filter(function(r){ return r.priority==='DATA_ISSUE' && !(r.tiktokStock===0 && r.birdTotal===0); });
   }
   function renderDataIssueModalBody(){
     const list = computeDataIssueRows();
@@ -2374,7 +2388,7 @@
       '<div class="table-scroll" style="max-height:300px; overflow-y:auto; margin-top:10px;">' +
       '<table><thead><tr>' +
       '<th>Product Code</th><th>Product Name</th><th>SKU</th><th>Color</th><th>Size</th>' +
-      '<th class="num">TikTok Stock</th><th class="num">Bird Available</th><th class="num">Bird NONL</th><th class="num">Bird NOFF</th>' +
+      '<th class="num">TikTok Stock</th><th class="num">Bird NONL</th><th class="num">Bird NOFF</th>' +
       '<th>วันที่คาดว่าจะเติมสต็อก</th>' +
       '</tr></thead><tbody>' +
       capped.map(function(v){
@@ -2383,7 +2397,6 @@
           '<td class="mono">'+escapeHtml(displaySku(v))+'</td>'+
           '<td>'+escapeHtml(v.color||'—')+'</td><td>'+escapeHtml(v.size||'—')+'</td>'+
           '<td class="num">'+fmtInt(v.tiktokStock)+'</td>'+
-          '<td class="num">'+(v.birdStatus==='OK'?fmtInt(v.birdStock):birdBadge(v.birdStatus, birdExtraLabel(v)))+'</td>'+
           '<td class="num">'+fmtInt(v.birdNonl)+'</td>'+
           '<td class="num">'+fmtInt(v.birdNoff)+'</td>'+
           '<td><input type="date" class="manual-add-date-input" data-sku="'+escapeHtml(v.sku)+'" value="'+escapeHtml(restockEta.get(v.sku)||'')+'"></td></tr>';
