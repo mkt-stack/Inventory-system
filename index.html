@@ -649,6 +649,7 @@
         </button>
       </div>
       <div class="filter-bar" style="margin-top:12px;">
+        <select id="nonlMismatchFamilyFilter"><option value="">All Families</option></select>
         <div class="spacer"></div>
         <button class="btn btn-ghost btn-sm" id="nonlMismatchExportBtn" type="button">⬇ Export CSV</button>
       </div>
@@ -1805,7 +1806,7 @@
   /* ---------------------------- FILTER OPTIONS ----------------------------- */
   function populateFilterOptions(){
     const fams = Array.from(new Set(rows.map(r=>r.family).filter(Boolean))).sort();
-    [document.getElementById('familyFilter'), document.getElementById('todayFamilyFilter')].forEach(function(sel){
+    [document.getElementById('familyFilter'), document.getElementById('todayFamilyFilter'), document.getElementById('nonlMismatchFamilyFilter')].forEach(function(sel){
       const cur = sel.value;
       sel.innerHTML = '<option value="">All Families</option>' + fams.map(f=>'<option value="'+escapeHtml(f)+'">'+escapeHtml(f)+'</option>').join('');
       sel.value = cur;
@@ -1912,8 +1913,10 @@
   // CONFIG.nonlMismatchThreshold since small gaps are routine sync lag (checked against real
   // data: ungated this trips on ~50-77% of all SKUs).
   let nonlMismatchFilter = '';
+  let nonlMismatchFamilyFilter = '';
   function computeNonlMismatch(){
-    return rows.map(function(r){
+    const scoped = nonlMismatchFamilyFilter ? rows.filter(function(r){ return r.family===nonlMismatchFamilyFilter; }) : rows;
+    return scoped.map(function(r){
       const ttDiff = (r.birdNonl!==null && (r.birdNonl - r.tiktokStock) > CONFIG.nonlMismatchThreshold) ? (r.birdNonl - r.tiktokStock) : null;
       const noffVsNonlDiff = (r.birdNonl!==null && r.birdNoff!==null && (r.birdNoff - r.birdNonl) > CONFIG.nonlMismatchThreshold) ? (r.birdNoff - r.birdNonl) : null;
       return { r, ttDiff, noffVsNonlDiff };
@@ -2054,7 +2057,7 @@
     // by the dedicated "สินค้าหมดสต็อกทุกช่องทาง" list -- showing it here too is redundant and
     // just adds noise to a list that's supposed to mean "check the Bird data before trusting
     // it," not "this SKU has zero stock everywhere" (a different, more specific situation).
-    return rows.filter(function(r){ return r.priority==='DATA_ISSUE' && !(r.tiktokStock===0 && r.birdTotal===0); });
+    return rows.filter(function(r){ return r.priority==='DATA_ISSUE' && !isStockedOutEverywhere(r); });
   }
   function renderDataIssueModalBody(){
     const list = computeDataIssueRows();
@@ -2256,8 +2259,16 @@
   // Sorted by Product Code (stable) rather than "unset ETA first" — sorting by ETA-set-state
   // meant a row jumped to a different position the instant you filled in its date, which made
   // it look like the input hadn't registered. Stable order keeps the row you just edited in place.
+  // Shared by getStockedOutRows() and computeDataIssueRows() so the two lists stay mutually
+  // exclusive: birdTotal is exactly 0 when NONL/NOFF are real zeros, but null when both are
+  // genuinely blank/missing (no NONL and no NOFF cell at all) -- both cases mean "nothing
+  // usable anywhere" once TikTok is also 0, so both belong in "out of stock everywhere," not
+  // in the generic Data Issue list.
+  function isStockedOutEverywhere(r){
+    return r.tiktokStock===0 && (r.birdTotal===0 || r.birdTotal===null);
+  }
   function getStockedOutRows(){
-    return rows.filter(function(r){ return (r.tiktokStock===0 && r.birdTotal===0) || manualStockedOut.has(r.sku); })
+    return rows.filter(function(r){ return isStockedOutEverywhere(r) || manualStockedOut.has(r.sku); })
       .sort(function(a,b){ return (a.productCode||'').localeCompare(b.productCode||''); });
   }
   function restockEtaStatus(sku){
@@ -3365,6 +3376,10 @@
       nonlMismatchFilter = (nonlMismatchFilter === key) ? '' : key;
       renderNonlMismatch();
     });
+  });
+  document.getElementById('nonlMismatchFamilyFilter').addEventListener('change', function(){
+    nonlMismatchFamilyFilter = this.value;
+    renderNonlMismatch();
   });
   document.getElementById('nonlMismatchExportBtn').addEventListener('click', exportNonlMismatchCsv);
   document.getElementById('exportDailySnapshotBtn').addEventListener('click', exportDailySnapshotCsv);
