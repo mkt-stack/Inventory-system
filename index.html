@@ -418,7 +418,7 @@
               <th class="num" data-key="daysLeft" title="= TikTok Stock ÷ Average/Day (หลังคูณ Campaign Multiplier ถ้าเปิดใช้)">Days Left</th>
               <th class="num" data-key="usage" title="ประมาณจากการลดลงของ TikTok Stock เฉลี่ยเท่ากับจำนวนวัน Snapshot ที่มีข้อมูลจริง (ชี้เมาส์ที่ค่าในแต่ละแถวเพื่อดูว่าคิดจากกี่วัน) — ไม่ใช่ยอดขายจริง ใช้ค่ามัธยฐาน (median) ไม่ใช่ค่าเฉลี่ยเลขคณิต เพื่อกันไม่ให้เหตุการณ์ผิดปกติเพียงครั้งเดียวลากตัวเลขเพี้ยน ต้องมีช่วงที่สต็อกลดจริงอย่างน้อย 3 ครั้งถึงจะขึ้นตัวเลข ไม่งั้นจะขึ้น Insufficient History แทน">Average/Day</th>
               <th data-key="trend" title="เทียบอัตราการลดลงของ TikTok Stock ช่วงหลังกับช่วงก่อนหน้าในประวัติที่มี">Trend</th>
-              <th data-key="historyNetChange" title="ผลต่างสุทธิของสต็อก TikTok จาก Snapshot เก่าสุดถึงใหม่สุดในช่วงที่ติดตาม (เช่น -114 = ลดลง 114) — ชี้เมาส์เพื่อดูค่ารายวันทั้งหมด">Last30days</th>
+              <th data-key="historyNetChange" title="ผลต่างสุทธิของสต็อก TikTok ย้อนหลัง 30 วันปฏิทินล่าสุด จาก Snapshot เก่าสุดถึงใหม่สุดในช่วงนั้น (เช่น -114 = ลดลง 114) — ชี้เมาส์เพื่อดูค่ารายวันทั้งหมด">Last30days</th>
               <th class="num" data-key="suggestedQty" title="= MAX(Average/Day × (Target Cover + Safety Days) − TikTok Stock, 0)">Suggested</th>
               <th class="num" data-key="finalQty" title="= MIN(Suggested Qty, Bird Available) — ถ้า Bird มีไม่พอ Final จะน้อยกว่า Suggested">Final</th>
               <th class="num" data-key="salesAtRisk" title="Suggested Qty × ราคาขาย — โอกาสเสียยอดขายถ้าไม่เติมสต็อก SKU นี้">Sales at Risk (฿)</th>
@@ -953,7 +953,12 @@
     leadTimeDays: 4,
     p0Days: 2,                 // fixed boundary — Critical
     p1Days: 5,                 // fixed boundary — Urgent
-    rollingWindowSnapshots: 30, // how many recent snapshots feed usage/trend/stockout-loss tracking
+    rollingWindowSnapshots: 30, // how many recent SNAPSHOTS feed Average/Day and Trend
+    // Calendar days (not snapshot count) for Last30days and Stockout Impact -- a snapshot-
+    // count window can silently span more than 30 real days whenever there's a gap between
+    // uploads (e.g. skipped a day), which would misrepresent both "Last30days" and the
+    // "ย้อนหลังสูงสุด 30 วัน" stockout-impact label. This filters by actual date instead.
+    recentDaysWindow: 30,
     // A SKU with only 1-2 recorded stock-decrease events can have its whole Average/Day
     // estimate dictated by a single outlier delta (e.g. a one-time stock write-off/delist
     // reading as if it were a day's sales) -- require at least this many before trusting the
@@ -1611,14 +1616,17 @@
     const mustOrderNow = daysLeft!==null && daysLeft <= CONFIG.leadTimeDays;
     const orderByDate = daysLeft!==null ? addDays(effectiveToday(), Math.max(daysLeft - CONFIG.leadTimeDays, 0)) : null;
 
-    // Stockout-loss tracking, over the same rolling window as usage/trend (up to 30 days by
-    // default): count days recorded at exactly 0 TikTok stock, then apply this SKU's own
-    // measured sell-through rate (usage — NOT campaign-adjusted, this is a retrospective
-    // estimate of real days, not a forward forecast) to estimate demand that went unfulfilled
-    // simply because there was nothing to sell. Zero stockout days is a real, legitimate zero;
-    // stockout days with no usable usage figure is genuinely unknown, so stays null rather
-    // than silently reading as "lost nothing."
-    const windowHistory = history.slice(-CONFIG.rollingWindowSnapshots);
+    // Stockout-loss tracking and Last30days, over the actual last CONFIG.recentDaysWindow
+    // calendar days (not just however many snapshots happen to exist) -- count days recorded
+    // at exactly 0 TikTok stock, then apply this SKU's own measured sell-through rate (usage —
+    // NOT campaign-adjusted, this is a retrospective estimate of real days, not a forward
+    // forecast) to estimate demand that went unfulfilled simply because there was nothing to
+    // sell. Zero stockout days is a real, legitimate zero; stockout days with no usable usage
+    // figure is genuinely unknown, so stays null rather than silently reading as "lost nothing."
+    const latestHistoryDate = history.length ? history[history.length-1].date : null;
+    const recentWindowCutoff = latestHistoryDate ?
+      fmtDate(addDays(new Date(latestHistoryDate+'T00:00:00'), -CONFIG.recentDaysWindow)) : null;
+    const windowHistory = recentWindowCutoff ? history.filter(function(h){ return h.date >= recentWindowCutoff; }) : [];
     const stockoutDays = windowHistory.filter(function(h){ return h.stock===0; }).length;
     const trackedDays = windowHistory.length;
     const estLostQty = stockoutDays===0 ? 0 : (usageInfo.usage!==null ? stockoutDays*usageInfo.usage : null);
