@@ -554,6 +554,7 @@
           <option value="NEGATIVE">Negative (ผิดปกติ)</option>
           <option value="BLANK">Blank</option>
           <option value="N/A">N/A</option>
+          <option value="MISSING">ไม่พบใน Bird</option>
         </select>
         <div class="spacer"></div>
         <button class="btn btn-ghost btn-sm" id="clearFiltersBtn" type="button">ล้างตัวกรอง</button>
@@ -785,7 +786,7 @@
           <button class="modal-close" id="excludedSkuModalClose" type="button">✕</button>
         </div>
       </div>
-      <p class="section-desc" style="margin-top:0;">SKU เหล่านี้มีอยู่ในไฟล์ TikTok แต่ระบบหาคู่ใน Bird ไม่เจอเลย (ไม่ใช่ Bird Stock = 0 — คือหา SKU นี้ในไฟล์ Bird ไม่พบเลย) จึงถูกตัดออกจากการวิเคราะห์ทั้งหมด — ถ้า SKU ไหนคุณเห็นในไฟล์ Bird จริงๆ ให้เทียบ "Seller SKU" / "Base SKU" / "Normalized" ด้านล่างกับคอลัมน์ Sku code ในไฟล์ Bird คำต่อคำ ปัญหาที่พบบ่อย: มีช่องว่าง/อักขระแฝงติดมาจากไฟล์ต้นทาง, บาร์โค้ดถูกเก็บเป็นตัวเลขในไฟล์หนึ่งแต่เป็นข้อความอีกไฟล์, หรือ SKU นี้ซ้ำกับ SKU อื่นในไฟล์ Bird เอง</p>
+      <p class="section-desc" style="margin-top:0;">SKU เหล่านี้มีอยู่ในไฟล์ TikTok แต่ระบบหาคู่ใน Bird ไม่เจอเลย (ไม่ใช่ Bird Stock = 0 — คือหา SKU นี้ในไฟล์ Bird ไม่พบเลย) จึงถูกตัดออกจากการวิเคราะห์ทั้งหมด (SKU ที่ลงท้าย "_ตัวเลข" จากฟีเจอร์ตะกร้า/คอมโบของ TikTok และ SKU รหัส "TIKTOKSHOP..." ไม่อยู่ในลิสต์นี้แล้ว — ดูที่ Full Inventory แทน) — ถ้า SKU ไหนคุณเห็นในไฟล์ Bird จริงๆ ให้เทียบ "Seller SKU" / "Base SKU" / "Normalized" ด้านล่างกับคอลัมน์ Sku code ในไฟล์ Bird คำต่อคำ ปัญหาที่พบบ่อย: มีช่องว่าง/อักขระแฝงติดมาจากไฟล์ต้นทาง, บาร์โค้ดถูกเก็บเป็นตัวเลขในไฟล์หนึ่งแต่เป็นข้อความอีกไฟล์, หรือ SKU นี้ซ้ำกับ SKU อื่นในไฟล์ Bird เอง</p>
       <div class="table-scroll" style="max-height:60vh; overflow-y:auto;">
         <table>
           <thead>
@@ -1308,13 +1309,17 @@
 
     const map = new Map();
     const list = [];
-    let skippedNonNumeric = 0, missingNameCount = 0, dupSkuCount = 0;
+    let skippedNonNumeric = 0, missingNameCount = 0, dupSkuCount = 0, removedTiktokPlaceholderCount = 0;
 
     for (let r=headerRowIdx+1; r<aoa.length; r++){
       const row = aoa[r];
       if (!row) continue;
       const sellerSku = norm(iSeller!==-1 ? row[iSeller] : '');
       if (!sellerSku) continue;
+      // "TIKTOKSHOP..." Seller SKUs are internal TikTok Shop placeholder codes, not real
+      // product barcodes -- they never have (and never will have) a Bird counterpart, so drop
+      // them from the system entirely rather than let them clutter the excluded-SKU list.
+      if (/^tiktok/i.test(sellerSku)){ removedTiktokPlaceholderCount++; continue; }
       const availRaw = iAvail!==-1 ? row[iAvail] : null;
       if (typeof availRaw !== 'number'){ skippedNonNumeric++; continue; }
       const lockedRaw = iLocked!==-1 ? row[iLocked] : null;
@@ -1345,7 +1350,7 @@
       list.push(ttRow);
     }
     map.__list = list;
-    map.__stats = { skippedNonNumeric, missingNameCount, dupSkuCount, totalRows: list.length };
+    map.__stats = { skippedNonNumeric, missingNameCount, dupSkuCount, removedTiktokPlaceholderCount, totalRows: list.length };
     return map;
   }
 
@@ -1440,6 +1445,7 @@
       if (row.birdStatus==='NOFF') return 'CHECK BIRD — NOFF';
       if (row.birdStatus==='NEGATIVE') return 'CHECK BIRD — NEGATIVE STOCK';
       if (row.birdStatus==='BLANK') return 'CHECK BIRD — NO DATA';
+      if (row.birdStatus==='MISSING') return 'CHECK BIRD — SKU NOT FOUND';
       return 'CHECK BIRD — DATA ISSUE';
     }
     if (row.insufficientHistory) return 'INSUFFICIENT HISTORY';
@@ -1489,6 +1495,7 @@
   const BIRD_STATUS_META = {
     OK: { cls:'good' }, NONL: { cls:'warning' }, NOFF: { cls:'serious' },
     NEGATIVE: { cls:'critical' }, BLANK: { cls:'muted' }, 'N/A': { cls:'muted' }, OTHER: { cls:'muted' },
+    MISSING: { cls:'critical' },
   };
   // Plain-Thai hover explanations for each Bird Status code — shown as a native
   // tooltip on every status badge so a Leader doesn't need to memorize the codes.
@@ -1500,6 +1507,7 @@
     BLANK: 'เจอ SKU ในไฟล์ Bird แต่ช่องสต็อกออนไลน์ (NONL) ว่างเปล่า ไม่มีตัวเลขกรอกไว้ และไม่มีสต็อกออฟไลน์ (NOFF) ชดเชยด้วย',
     'N/A': 'Bird ระบุว่าไม่มีข้อมูล (N/A) สำหรับ SKU นี้',
     OTHER: 'ค่าที่ได้จาก Bird อ่านไม่เข้าใจ/ไม่ตรงรูปแบบที่คาดไว้ — ควรตรวจสอบไฟล์ต้นทาง',
+    MISSING: 'หา SKU นี้ในไฟล์ Bird ไม่เจอเลย (ไม่ใช่ Bird Stock = 0) — มักเป็น SKU ใหม่จากฟีเจอร์ตะกร้า/ชุดคอมโบของ TikTok ที่ Bird ยังไม่มีข้อมูลคลังสำหรับโค้ดนี้ เบิกให้ไม่ได้จนกว่าจะมีข้อมูล Bird',
   };
   function birdStatusTip(status){ return BIRD_STATUS_TIP[status] || 'สถานะข้อมูลจาก Bird ไม่ทราบความหมาย'; }
   // Plain-language badge text instead of the raw internal status code -- the code itself
@@ -1510,6 +1518,7 @@
     // (e.g. "มีของ" + " (ออฟไลน์: 5)") -- keep this one word so it doesn't say "ออฟไลน์" twice.
     OK: 'พร้อมเบิก', NOFF: 'มีของ', NEGATIVE: 'ข้อมูลผิดปกติ',
     BLANK: 'ไม่มีข้อมูล', NONL: 'อ่านค่าไม่ได้', 'N/A': 'ไม่มีข้อมูล', OTHER: 'ข้อมูลไม่ปกติ',
+    MISSING: 'ไม่พบใน Bird',
   };
   // Every SKU with a non-OK Bird status is data we deliberately never coerce to a
   // plain number — see birdStatusTip() for why each code exists.
@@ -1546,11 +1555,11 @@
       if (sug) suggestedFamily = sug;
       family = 'UNMAPPED';
     }
-    const birdStock = birdRow.birdNumeric;
-    const birdStatus = birdRow.birdStatus;
+    const birdStock = birdRow ? birdRow.birdNumeric : null;
+    const birdStatus = birdRow ? birdRow.birdStatus : 'MISSING';
     const subCollection = (birdRow && birdRow.subCollection) || 'UNMAPPED';
     const category = (birdRow && birdRow.category) || 'UNMAPPED';
-    const sellingPrice = birdRow.sellingPrice;
+    const sellingPrice = birdRow ? birdRow.sellingPrice : null;
     return {
       sku: ttRow.sellerSku, baseSku: ttRow.baseSku,
       tiktokStock: ttRow.available, tiktokTotal: ttRow.total, tiktokLocked: ttRow.locked,
@@ -1722,6 +1731,16 @@
       for (const ttRow of ttList){
         const birdRow = findBirdMatch(ttRow, birdMap, normBirdIdx);
         if (!birdRow){
+          // TikTok's "new basket/bundle" feature mints fresh _N-suffixed Seller SKUs that
+          // never get a corresponding Bird warehouse entry (confirmed against real data: their
+          // base SKU genuinely doesn't exist in Bird at all -- not a matching bug). These are
+          // real, ongoing listings a Leader needs visibility into, just without replenishment
+          // data, so keep them in Full Inventory with Bird Status = MISSING instead of hiding
+          // them in the excluded-SKU list.
+          if (/_\d+$/.test(ttRow.sellerSku)){
+            bases.push(buildBaseRow(ttRow, null, null));
+            continue;
+          }
           excludedNotFoundRows.push({
             sellerSku: ttRow.sellerSku,
             baseSku: ttRow.baseSku,
@@ -1755,7 +1774,9 @@
         ? ' ⚠ จำนวนแถวใกล้เพดาน 5,000 ของ TikTok Export — ตรวจสอบว่าตรงกับจำนวน SKU ทั้งหมดใน Seller Center หรือไม่ ถ้าน้อยกว่าแสดงว่าไฟล์นี้ไม่ครบ'
         : '';
       const excludedNote = excludedNotFoundCount>0 ? (' · ตัด ' + fmtInt(excludedNotFoundCount) + ' SKU ที่หาไม่เจอใน Bird ออกจากการวิเคราะห์') : '';
-      setStatus('วิเคราะห์สำเร็จ — TikTok ' + fmtInt(ttList.length) + ' SKU, Bird ' + fmtInt(birdMap.size) + ' SKU (Lookup), วิเคราะห์จริง ' + fmtInt(baseRows.length) + ' SKU' + excludedNote + capWarning, capWarning ? 'err' : 'ok');
+      const tiktokPlaceholderCount = (ttMap.__stats && ttMap.__stats.removedTiktokPlaceholderCount) || 0;
+      const tiktokPlaceholderNote = tiktokPlaceholderCount>0 ? (' · ตัด ' + fmtInt(tiktokPlaceholderCount) + ' SKU รหัส TIKTOKSHOP (โค้ดภายในของ TikTok ไม่ใช่สินค้าจริง) ออกจากระบบทั้งหมด') : '';
+      setStatus('วิเคราะห์สำเร็จ — TikTok ' + fmtInt(ttList.length) + ' SKU, Bird ' + fmtInt(birdMap.size) + ' SKU (Lookup), วิเคราะห์จริง ' + fmtInt(baseRows.length) + ' SKU' + excludedNote + tiktokPlaceholderNote + capWarning, capWarning ? 'err' : 'ok');
       document.getElementById('resultsSection').style.display = 'block';
     } catch(err){
       console.error(err);
@@ -3033,7 +3054,7 @@
   /* -------------------------------- NOTES ------------------------------------ */
   function renderNotes(){
     const html = [
-      '<p><b>ขอบเขตข้อมูล:</b> ระบบนี้ใช้ TikTok Seller Center เป็น Master Dataset — วิเคราะห์เฉพาะ SKU ที่มีอยู่ใน TikTok <b>และ</b> แมตช์เจอใน Bird เท่านั้น SKU ที่มีใน Bird แต่ไม่ได้ขายบน TikTok จะไม่ถูกนำมาแสดงหรือวิเคราะห์เลย และในทางกลับกัน SKU ที่มีบน TikTok แต่หาไม่เจอใน Bird เลยก็ถูกตัดออกจากการวิเคราะห์เช่นกัน เพราะไม่มีข้อมูลให้เบิกได้' +
+      '<p><b>ขอบเขตข้อมูล:</b> ระบบนี้ใช้ TikTok Seller Center เป็น Master Dataset — วิเคราะห์เฉพาะ SKU ที่มีอยู่ใน TikTok <b>และ</b> แมตช์เจอใน Bird เท่านั้น SKU ที่มีใน Bird แต่ไม่ได้ขายบน TikTok จะไม่ถูกนำมาแสดงหรือวิเคราะห์เลย ในทางกลับกัน SKU ที่มีบน TikTok แต่หาไม่เจอใน Bird เลยจะถูกตัดออกจากการวิเคราะห์ ยกเว้น SKU ที่ลงท้ายด้วย "_ตัวเลข" (เช่น _1, _2 — มาจากฟีเจอร์ตะกร้า/ชุดคอมโบใหม่ของ TikTok) จะยังคงแสดงในตาราง Full Inventory ปกติพร้อมสถานะ Bird เป็น "ไม่พบใน Bird" เพื่อให้เห็นสินค้าที่มีอยู่จริง แม้จะเบิกจาก Bird ไม่ได้ก็ตาม ส่วน SKU รหัส "TIKTOKSHOP..." (โค้ดภายในของ TikTok ไม่ใช่บาร์โค้ดสินค้าจริง) จะถูกตัดออกจากระบบทั้งหมดตั้งแต่ขั้นตอนอ่านไฟล์' +
         (baseRows && baseRows.__excludedNotFoundCount>0 ? ' — รอบล่าสุดตัดออกไป ' + fmtInt(baseRows.__excludedNotFoundCount) + ' SKU' : '') + '</p>',
       '<p><b>NONL / NOFF:</b> ในไฟล์ Bird คอลัมน์ NONL = จำนวนสต็อกออนไลน์ (ใช้เป็น Bird Available หลัก) และ NOFF = จำนวนสต็อกออฟไลน์/หน้าร้าน — ทั้งสองเป็นตัวเลขจริง ถ้า NONL เป็น 0 หรือว่างเปล่าแต่ NOFF มีของอยู่ ระบบจะขึ้นสถานะ "NOFF" หมายถึงของมีจริงแต่จัดสรรให้ออฟไลน์ ยังเบิกให้ TikTok ไม่ได้ทันที ส่วนค่าติดลบหรือค่าที่อ่านไม่ได้จาก Bird จะไม่ถูกนำมาคำนวณเป็น Stock = 0 หรือใช้วางแผนเบิกเด็ดขาด — ระบบจะขึ้นสถานะที่เกี่ยวข้องและแนะนำให้ตรวจสอบ Bird ก่อนเบิกเสมอ</p>',
       '<p><b>Estimated Daily Usage:</b> ประมาณจากอัตราการ<b>ลดลง</b>ของ TikTok Stock ระหว่าง Snapshot เท่านั้น (ไม่ใช่ยอดขายจริง เพราะอาจเกิดจาก Adjustment, Cancellation หรือแก้ไข Stock ได้) วันที่ Stock เพิ่มขึ้นจะถูกจัดเป็น "REPLENISHMENT EVENT" และไม่ถูกนำมาคำนวณ Usage เฉลี่ย ใช้ค่ามัธยฐาน (median) ของทุกช่วงที่สต็อกลดจริง ไม่ใช่ค่าเฉลี่ยเลขคณิต เพื่อกันไม่ให้เหตุการณ์ผิดปกติครั้งเดียว (เช่น เลิกขาย/ปรับสต็อกครั้งใหญ่) ลากตัวเลขให้เพี้ยน และต้องมีช่วงที่สต็อกลดจริงอย่างน้อย ' + CONFIG.minConsumptionEventsForUsage + ' ครั้งถึงจะคำนวณ Usage — ถ้าน้อยกว่านั้นจะขึ้น "Insufficient History" แทน</p>',
