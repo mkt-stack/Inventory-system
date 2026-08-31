@@ -875,11 +875,13 @@
           <thead>
             <tr>
               <th>Product Code</th><th>Product Name</th><th>SKU</th>
-              <th class="num">TikTok Stock</th>
-              <th class="num">Suggested</th><th class="num">NONL (Online)</th><th class="num">NOFF (Offline)</th>
+              <th class="num" title="จำนวนที่มี (พร้อมขาย) จากไฟล์ TikTok Seller Center ล่าสุด">TikTok Stock</th>
+              <th class="num" title="= MAX(Average/Day × (Target Cover + Safety Days) − TikTok Stock, 0)">Suggested</th>
+              <th class="num" title="Bird NONL — สต็อกออนไลน์ดิบจากไฟล์ Bird (ก่อนตีความสถานะ)">NONL (Online)</th>
+              <th class="num" title="Bird NOFF — สต็อกออฟไลน์/หน้าร้านดิบจากไฟล์ Bird">NOFF (Offline)</th>
               <th class="num" title="Estimated Daily Usage เฉลี่ยจากจำนวนวัน Snapshot ที่มีข้อมูลจริง">Average/Day</th>
               <th title="ผลต่างสุทธิของสต็อก TikTok จาก Snapshot เก่าสุดถึงใหม่สุดในช่วงที่ติดตาม (เช่น -114 = ลดลง 114) — ชี้เมาส์เพื่อดูค่ารายวันทั้งหมด">Last30days</th>
-              <th class="num">Allocate from NOFF</th>
+              <th class="num" title="= MIN(Suggested Qty − NONL, NOFF ที่มี) — จำนวนสูงสุดที่โยกจาก NOFF มาช่วยออนไลน์ได้จริง อาจยังไม่ครบ 100% ของ Suggested ถ้า NOFF มีไม่พอ">Allocate from NOFF</th>
             </tr>
           </thead>
           <tbody id="noffModalTbody"></tbody>
@@ -2324,9 +2326,9 @@
     const list = getNoffAllocationRows();
     document.getElementById('noffModalSub').textContent = fmtInt(list.length) + ' SKU';
     document.getElementById('noffModalTbody').innerHTML = list.length ? list.map(function(r){
-      return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'">'+escapeHtml(r.productCode||'—')+'</td>'+
+      return '<tr><td class="mono link-cell" data-sku="'+escapeHtml(r.sku)+'" data-nav="product">'+escapeHtml(r.productCode||'—')+'</td>'+
         '<td class="strong truncate" title="'+escapeHtml(cleanProductName(r.productName, r.productCode)||'')+'">'+escapeHtml(cleanProductName(r.productName, r.productCode)||'(ไม่มีชื่อ)')+'</td>'+
-        '<td class="mono">'+escapeHtml(displaySku(r))+'</td>'+
+        '<td class="mono link-cell" data-sku="'+escapeHtml(displaySku(r))+'" data-nav="inventory" title="ดู SKU นี้ในหน้า Full Inventory">'+escapeHtml(displaySku(r))+'</td>'+
         '<td class="num">'+fmtInt(r.tiktokStock)+'</td>'+
         '<td class="num">'+fmtInt(r.suggestedQty)+'</td>'+
         '<td class="num">'+fmtInt(r.birdNonl)+'</td>'+
@@ -2336,7 +2338,11 @@
         '<td class="num strong rec-text warning">'+fmtInt(r.noffAllocation)+'</td></tr>';
     }).join('') : '<tr><td colspan="10" class="focus-empty">ไม่มีรายการตอนนี้ 🎉</td></tr>';
     Array.from(document.getElementById('noffModalTbody').querySelectorAll('.link-cell')).forEach(function(td){
-      td.addEventListener('click', function(){ closeNoffModal(); openProductModal(td.getAttribute('data-sku')); });
+      td.addEventListener('click', function(){
+        const sku = td.getAttribute('data-sku');
+        if (td.getAttribute('data-nav')==='inventory'){ closeNoffModal(); jumpToInventorySku(sku); }
+        else { closeNoffModal(); openProductModal(sku); }
+      });
     });
   }
   function openNoffModal(){ renderNoffModalBody(); document.getElementById('noffModalBackdrop').classList.add('open'); }
