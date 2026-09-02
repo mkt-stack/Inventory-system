@@ -194,6 +194,20 @@
   .toolbar input[type=text], .filter-bar input[type=text] { min-width: 200px; flex: 1; max-width: none; }
   .toolbar .spacer, .filter-bar .spacer { flex: 1; min-width: 8px; }
 
+  .col-toggle-wrap { position: relative; }
+  .col-toggle-panel {
+    display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 20;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.15); padding: 10px; min-width: 220px; max-height: 340px; overflow-y: auto;
+  }
+  .col-toggle-panel.open { display: block; }
+  .col-toggle-panel label {
+    display: flex; align-items: center; gap: 8px; padding: 5px 4px; font-size: 12.5px;
+    color: var(--text-primary); cursor: pointer; white-space: nowrap;
+  }
+  .col-toggle-panel label:hover { background: var(--page-plane); border-radius: 6px; }
+  .col-toggle-panel .ct-actions { display:flex; gap:8px; margin-top:6px; padding-top:8px; border-top:1px solid var(--gridline); }
+
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th {
     text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .3px;
@@ -230,6 +244,38 @@
 
   .table-scroll { overflow-x: auto; border: 1px solid var(--gridline); border-radius: 10px; }
   .table-scroll table { min-width: 1000px; }
+  /* Column-visibility toggle: nth-child hide rules, one per toggle-able column index */
+  #todayTable.hide-col-5 th:nth-child(5), #todayTable.hide-col-5 td:nth-child(5) { display:none; }
+  #todayTable.hide-col-7 th:nth-child(7), #todayTable.hide-col-7 td:nth-child(7) { display:none; }
+  #todayTable.hide-col-8 th:nth-child(8), #todayTable.hide-col-8 td:nth-child(8) { display:none; }
+  #todayTable.hide-col-9 th:nth-child(9), #todayTable.hide-col-9 td:nth-child(9) { display:none; }
+  #todayTable.hide-col-10 th:nth-child(10), #todayTable.hide-col-10 td:nth-child(10) { display:none; }
+  #todayTable.hide-col-11 th:nth-child(11), #todayTable.hide-col-11 td:nth-child(11) { display:none; }
+  #todayTable.hide-col-12 th:nth-child(12), #todayTable.hide-col-12 td:nth-child(12) { display:none; }
+  #todayTable.hide-col-13 th:nth-child(13), #todayTable.hide-col-13 td:nth-child(13) { display:none; }
+  #todayTable.hide-col-14 th:nth-child(14), #todayTable.hide-col-14 td:nth-child(14) { display:none; }
+  #todayTable.hide-col-15 th:nth-child(15), #todayTable.hide-col-15 td:nth-child(15) { display:none; }
+  #todayTable.hide-col-16 th:nth-child(16), #todayTable.hide-col-16 td:nth-child(16) { display:none; }
+  #todayTable.hide-col-17 th:nth-child(17), #todayTable.hide-col-17 td:nth-child(17) { display:none; }
+  #todayTable.hide-col-18 th:nth-child(18), #todayTable.hide-col-18 td:nth-child(18) { display:none; }
+  #mainTable.hide-col-4 th:nth-child(4), #mainTable.hide-col-4 td:nth-child(4) { display:none; }
+  #mainTable.hide-col-5 th:nth-child(5), #mainTable.hide-col-5 td:nth-child(5) { display:none; }
+  #mainTable.hide-col-6 th:nth-child(6), #mainTable.hide-col-6 td:nth-child(6) { display:none; }
+  #mainTable.hide-col-7 th:nth-child(7), #mainTable.hide-col-7 td:nth-child(7) { display:none; }
+  #mainTable.hide-col-8 th:nth-child(8), #mainTable.hide-col-8 td:nth-child(8) { display:none; }
+  #mainTable.hide-col-10 th:nth-child(10), #mainTable.hide-col-10 td:nth-child(10) { display:none; }
+  #mainTable.hide-col-11 th:nth-child(11), #mainTable.hide-col-11 td:nth-child(11) { display:none; }
+  #mainTable.hide-col-12 th:nth-child(12), #mainTable.hide-col-12 td:nth-child(12) { display:none; }
+  #mainTable.hide-col-13 th:nth-child(13), #mainTable.hide-col-13 td:nth-child(13) { display:none; }
+  #mainTable.hide-col-14 th:nth-child(14), #mainTable.hide-col-14 td:nth-child(14) { display:none; }
+  #mainTable.hide-col-15 th:nth-child(15), #mainTable.hide-col-15 td:nth-child(15) { display:none; }
+  #mainTable.hide-col-16 th:nth-child(16), #mainTable.hide-col-16 td:nth-child(16) { display:none; }
+  #mainTable.hide-col-17 th:nth-child(17), #mainTable.hide-col-17 td:nth-child(17) { display:none; }
+  #mainTable.hide-col-18 th:nth-child(18), #mainTable.hide-col-18 td:nth-child(18) { display:none; }
+  #mainTable.hide-col-19 th:nth-child(19), #mainTable.hide-col-19 td:nth-child(19) { display:none; }
+  #mainTable.hide-col-20 th:nth-child(20), #mainTable.hide-col-20 td:nth-child(20) { display:none; }
+  #mainTable.hide-col-21 th:nth-child(21), #mainTable.hide-col-21 td:nth-child(21) { display:none; }
+  #mainTable.hide-col-22 th:nth-child(22), #mainTable.hide-col-22 td:nth-child(22) { display:none; }
   /* Long tables (Full Inventory, Today's Replenishment) get a capped height with
      their own scrollbar and a frozen header — so the page itself stays a
      manageable length instead of growing to 50 full-height rows every time. */
@@ -400,6 +446,10 @@
           <option value="DATA_ISSUE">Data Issue</option>
         </select>
         <div class="spacer"></div>
+        <div class="col-toggle-wrap">
+          <button class="btn btn-ghost btn-sm" id="todayColToggleBtn" type="button">🔧 คอลัมน์</button>
+          <div class="col-toggle-panel" id="todayColTogglePanel"></div>
+        </div>
         <button class="btn btn-ghost btn-sm" id="exportTodayBtn" type="button">⬇ Export CSV</button>
       </div>
       <div class="table-scroll scroll-capped">
@@ -557,6 +607,10 @@
           <option value="MISSING">ไม่พบใน Bird</option>
         </select>
         <div class="spacer"></div>
+        <div class="col-toggle-wrap">
+          <button class="btn btn-ghost btn-sm" id="mainColToggleBtn" type="button">🔧 คอลัมน์</button>
+          <div class="col-toggle-panel" id="mainColTogglePanel"></div>
+        </div>
         <button class="btn btn-ghost btn-sm" id="clearFiltersBtn" type="button">ล้างตัวกรอง</button>
         <button class="btn btn-ghost btn-sm" id="exportBtn" type="button">⬇ Export CSV</button>
       </div>
@@ -3022,6 +3076,86 @@
     const savedTab = localStorage.getItem(TAB_PERSIST_KEY);
     if (savedTab && VALID_TABS.indexOf(savedTab)!==-1) switchTab(savedTab);
   } catch(e){}
+
+  /* ------------------------------ COLUMN VISIBILITY TOGGLE ------------------------------ */
+  // Identity columns (star/priority/product code/name/sku) are never toggle-able -- hiding
+  // them would break click-to-navigate and basic row identification. Everything else (data/
+  // metric columns) can be hidden, one checklist per table, persisted independently so a
+  // Leader's "just show me TikTok/NONL/NOFF" view on Today's Replenishment doesn't affect
+  // what they see on Full Inventory.
+  const TODAY_TOGGLE_COLS = [
+    {idx:5, key:'family', label:'Family'},
+    {idx:7, key:'tiktokStock', label:'TikTok'},
+    {idx:8, key:'birdNonl', label:'NONL'},
+    {idx:9, key:'birdNoff', label:'NOFF'},
+    {idx:10, key:'daysLeft', label:'Days Left'},
+    {idx:11, key:'usage', label:'Average/Day'},
+    {idx:12, key:'trend', label:'Trend'},
+    {idx:13, key:'historyNetChange', label:'Last30days'},
+    {idx:14, key:'suggestedQty', label:'Suggested'},
+    {idx:15, key:'finalQty', label:'Final'},
+    {idx:16, key:'salesAtRisk', label:'Sales at Risk'},
+    {idx:17, key:'orderByDate', label:'Order By'},
+    {idx:18, key:'recommendation', label:'Recommendation'},
+  ];
+  const MAIN_TOGGLE_COLS = [
+    {idx:4, key:'family', label:'Family'},
+    {idx:5, key:'subCollection', label:'SubCollection'},
+    {idx:6, key:'category', label:'Category'},
+    {idx:7, key:'color', label:'Color'},
+    {idx:8, key:'size', label:'Size'},
+    {idx:10, key:'tiktokStock', label:'TikTok Stock'},
+    {idx:11, key:'birdNonl', label:'Bird NONL'},
+    {idx:12, key:'birdNoff', label:'Bird NOFF'},
+    {idx:13, key:'birdTotal', label:'Bird Total'},
+    {idx:14, key:'dailyChange', label:'Daily Stock Change'},
+    {idx:15, key:'trend', label:'Stock Trend'},
+    {idx:16, key:'usage', label:'Est. Daily Usage'},
+    {idx:17, key:'daysLeft', label:'Est. Days Left'},
+    {idx:18, key:'suggestedQty', label:'Suggested Qty'},
+    {idx:19, key:'finalQty', label:'Final Qty'},
+    {idx:20, key:'salesAtRisk', label:'Sales at Risk'},
+    {idx:21, key:'birdStatus', label:'Bird Status'},
+    {idx:22, key:'replenishStatus', label:'Replenishment Status'},
+  ];
+  function setupColumnToggle(tableId, btnId, panelId, columns, storageKey){
+    const table = document.getElementById(tableId);
+    const btn = document.getElementById(btnId);
+    const panel = document.getElementById(panelId);
+    let hidden = [];
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      if (Array.isArray(saved)) hidden = saved.filter(function(k){ return columns.some(function(c){ return c.key===k; }); });
+    } catch(e){}
+    function applyVisibility(){
+      columns.forEach(function(c){ table.classList.toggle('hide-col-'+c.idx, hidden.indexOf(c.key)!==-1); });
+    }
+    function persist(){ try { localStorage.setItem(storageKey, JSON.stringify(hidden)); } catch(e){} }
+    panel.innerHTML = columns.map(function(c){
+      const checked = hidden.indexOf(c.key)===-1;
+      return '<label><input type="checkbox" data-col-key="'+c.key+'" '+(checked?'checked':'')+'> '+escapeHtml(c.label)+'</label>';
+    }).join('') + '<div class="ct-actions"><button type="button" class="btn-link" id="'+btnId+'ShowAll">แสดงทั้งหมด</button></div>';
+    Array.from(panel.querySelectorAll('input[type=checkbox]')).forEach(function(cb){
+      cb.addEventListener('change', function(){
+        const key = cb.getAttribute('data-col-key');
+        if (cb.checked) hidden = hidden.filter(function(k){ return k!==key; });
+        else if (hidden.indexOf(key)===-1) hidden.push(key);
+        applyVisibility();
+        persist();
+      });
+    });
+    document.getElementById(btnId+'ShowAll').addEventListener('click', function(){
+      hidden = [];
+      applyVisibility();
+      persist();
+      Array.from(panel.querySelectorAll('input[type=checkbox]')).forEach(function(cb){ cb.checked = true; });
+    });
+    btn.addEventListener('click', function(e){ e.stopPropagation(); panel.classList.toggle('open'); });
+    document.addEventListener('click', function(e){ if (!panel.contains(e.target) && e.target!==btn) panel.classList.remove('open'); });
+    applyVisibility();
+  }
+  setupColumnToggle('todayTable', 'todayColToggleBtn', 'todayColTogglePanel', TODAY_TOGGLE_COLS, 'stockMonitorHiddenCols_today_v1');
+  setupColumnToggle('mainTable', 'mainColToggleBtn', 'mainColTogglePanel', MAIN_TOGGLE_COLS, 'stockMonitorHiddenCols_main_v1');
 
   document.getElementById('gapListBtn').addEventListener('click', openGapListModal);
   document.getElementById('gapListClose').addEventListener('click', closeGapListModal);
