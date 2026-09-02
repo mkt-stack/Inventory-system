@@ -1610,9 +1610,15 @@
     let family = (masterInfo && masterInfo.family) || '';
     let suggestedFamily = null;
     if (!family){
+      // No Brand Family from Bird (either no Bird match at all, or Bird just didn't set one)
+      // -- fall back to matching the product name against familyVocab, the set of family
+      // names Bird itself actually uses elsewhere, so "GQ Easy Smoothies" still lands under
+      // EASY instead of everything with no Bird family value bucketing into one undifferentiated
+      // UNMAPPED pile. suggestedFamily stays populated too so a caller can tell this was
+      // inferred from the name rather than confirmed by Bird.
       const sug = suggestFamilyFromName(productName, familyVocab);
-      if (sug) suggestedFamily = sug;
-      family = 'UNMAPPED';
+      if (sug){ suggestedFamily = sug; family = sug; }
+      else { family = 'UNMAPPED'; }
     }
     const birdStock = birdRow ? birdRow.birdNumeric : null;
     const birdStatus = birdRow ? birdRow.birdStatus : 'MISSING';
