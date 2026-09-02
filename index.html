@@ -802,7 +802,7 @@
     <div class="modal-panel" style="max-width:1100px;">
       <div class="modal-head">
         <div>
-          <p class="modal-title">⚠️ SKU ที่มีปัญหาข้อมูล Bird</p>
+          <p class="modal-title">⚠️ SKU ที่หาไม่เจอใน Bird เลย</p>
           <p class="modal-sub" id="dataIssueModalSub"></p>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
@@ -810,7 +810,7 @@
           <button class="modal-close" id="dataIssueModalClose" type="button">✕</button>
         </div>
       </div>
-      <p class="section-desc" style="margin-top:0;">SKU เหล่านี้ Bird ไม่มีตัวเลขสต็อกออนไลน์ที่ใช้เบิกได้จริง (ไม่ใช่ OK) จึงเบิกให้ไม่ได้จนกว่าจะตรวจสอบไฟล์ Bird ก่อน — คลิก SKU เพื่อดูรายละเอียดในหน้า Full Inventory</p>
+      <p class="section-desc" style="margin-top:0;">SKU เหล่านี้ค้นหาในไฟล์ Bird ทั้งไฟล์แล้วไม่พบเลย (ไม่ใช่แค่ NONL/NOFF เป็นค่าว่างหรือ 0 — คือไม่มีแถวของ SKU นี้ในไฟล์ Bird เลย) จึงเบิกให้ไม่ได้จนกว่าจะเพิ่มข้อมูลใน Bird — คลิก SKU เพื่อดูรายละเอียดในหน้า Full Inventory</p>
       <div class="table-scroll" style="max-height:60vh; overflow-y:auto;">
         <table>
           <thead>
@@ -913,6 +913,9 @@
         <div id="manualAddResults"></div>
       </div>
 
+      <div class="filter-bar" style="margin-bottom:10px;">
+        <select id="stockedOutFamilyFilter"><option value="">All Families</option></select>
+      </div>
       <div class="table-scroll" style="max-height:60vh; overflow-y:auto;">
         <table>
           <thead>
@@ -1837,7 +1840,7 @@
   /* ---------------------------- FILTER OPTIONS ----------------------------- */
   function populateFilterOptions(){
     const fams = Array.from(new Set(rows.map(r=>r.family).filter(Boolean))).sort();
-    [document.getElementById('familyFilter'), document.getElementById('todayFamilyFilter'), document.getElementById('nonlMismatchFamilyFilter')].forEach(function(sel){
+    [document.getElementById('familyFilter'), document.getElementById('todayFamilyFilter'), document.getElementById('nonlMismatchFamilyFilter'), document.getElementById('stockedOutFamilyFilter')].forEach(function(sel){
       const cur = sel.value;
       sel.innerHTML = '<option value="">All Families</option>' + fams.map(f=>'<option value="'+escapeHtml(f)+'">'+escapeHtml(f)+'</option>').join('');
       sel.value = cur;
@@ -2076,7 +2079,7 @@
     }
     el.innerHTML = campaignNote + '<div class="alert-banner">' +
       (p0>0 ? '<div class="ai">🔴 <span class="n">'+fmtInt(p0)+'</span> SKU ระดับ Critical (P0) ต้องเบิกด่วน</div>' : '') +
-      (dataIssue>0 ? '<div class="ai">⚠️ <span class="n">'+fmtInt(dataIssue)+'</span> SKU มีปัญหาข้อมูล Bird ต้องตรวจสอบก่อนเบิก <button class="btn btn-ghost btn-sm" id="dataIssueViewBtn" type="button">ดูรายการ</button></div>' : '') +
+      (dataIssue>0 ? '<div class="ai">⚠️ <span class="n">'+fmtInt(dataIssue)+'</span> SKU หาไม่เจอใน Bird เลย ต้องตรวจสอบก่อนเบิก <button class="btn btn-ghost btn-sm" id="dataIssueViewBtn" type="button">ดูรายการ</button></div>' : '') +
       (totalSalesAtRisk>0 ? '<div class="ai">💸 <span class="n">'+fmtCurrency(totalSalesAtRisk)+'</span> โอกาสเสียยอดขายรวมถ้าไม่เติมสต็อกตามคำแนะนำ</div>' : '') +
       '</div>';
     if (dataIssue>0) document.getElementById('dataIssueViewBtn').addEventListener('click', openDataIssueModal);
@@ -2084,11 +2087,13 @@
 
   /* ------------------------------ DATA ISSUE MODAL ------------------------------ */
   function computeDataIssueRows(){
-    // A SKU that's out of stock everywhere (TikTok=0 and Bird NONL+NOFF=0) is already handled
-    // by the dedicated "สินค้าหมดสต็อกทุกช่องทาง" list -- showing it here too is redundant and
-    // just adds noise to a list that's supposed to mean "check the Bird data before trusting
-    // it," not "this SKU has zero stock everywhere" (a different, more specific situation).
-    return rows.filter(function(r){ return r.priority==='DATA_ISSUE' && !isStockedOutEverywhere(r); });
+    // Narrowed to Bird Status = MISSING only (SKU has no row in the Bird file at all) --
+    // NOFF/NEGATIVE/BLANK/NONL/OTHER all mean Bird DOES have a record for this SKU, just with
+    // a specific data problem, and NOFF-status P0 rows already have their own dedicated
+    // "Allocate from NOFF" list, so surfacing them here too was redundant with that. A SKU
+    // that's also out of stock everywhere (TikTok=0 and Bird NONL+NOFF=0) is handled by the
+    // dedicated "สินค้าหมดสต็อกทุกช่องทาง" list instead.
+    return rows.filter(function(r){ return r.birdStatus==='MISSING' && !isStockedOutEverywhere(r); });
   }
   function renderDataIssueModalBody(){
     const list = computeDataIssueRows();
@@ -2298,9 +2303,17 @@
   function isStockedOutEverywhere(r){
     return r.tiktokStock===0 && (r.birdTotal===0 || r.birdTotal===null);
   }
+  // Not applied inside getStockedOutRows() itself -- that function also feeds the "N SKU"
+  // badge on the always-visible critical-action button (renderCriticalActionPanels), which
+  // must keep showing the TRUE total regardless of whatever family a Leader last picked while
+  // the modal happened to be open. Only the modal's own render/export apply this filter.
+  let stockedOutFamilyFilter = '';
   function getStockedOutRows(){
     return rows.filter(function(r){ return isStockedOutEverywhere(r) || manualStockedOut.has(r.sku); })
       .sort(function(a,b){ return (a.productCode||'').localeCompare(b.productCode||''); });
+  }
+  function applyStockedOutFamilyFilter(list){
+    return stockedOutFamilyFilter ? list.filter(function(r){ return r.family===stockedOutFamilyFilter; }) : list;
   }
   function restockEtaStatus(sku){
     const dateStr = restockEta.get(sku);
@@ -2363,7 +2376,7 @@
     return '<select class="restock-status-select" data-sku="'+escapeHtml(sku)+'">'+opts+'</select>';
   }
   function renderStockedOutModalBody(){
-    const list = getStockedOutRows();
+    const list = applyStockedOutFamilyFilter(getStockedOutRows());
     document.getElementById('stockedOutModalSub').textContent = fmtInt(list.length) + ' SKU';
     document.getElementById('stockedOutModalTbody').innerHTML = list.length ? list.map(function(r){
       const pm = PRIORITY_META[r.priority] || {label:r.priority, cls:'muted'};
@@ -2479,7 +2492,7 @@
   function closeStockedOutModal(){ document.getElementById('stockedOutModalBackdrop').classList.remove('open'); }
   function exportStockedOutCsv(){
     const cols = ['Product Code','Product Name','SKU','Priority','Restock ETA','ETA Countdown','Order Status'];
-    const csv = toCsv(cols, getStockedOutRows(), function(r){
+    const csv = toCsv(cols, applyStockedOutFamilyFilter(getStockedOutRows()), function(r){
       return [r.productCode, cleanProductName(r.productName,r.productCode), displaySku(r), r.priority,
         restockEta.get(r.sku)||'', restockEtaStatus(r.sku).label, RESTOCK_STATUS_META[getRestockStatus(r.sku)].label];
     });
@@ -2496,6 +2509,10 @@
   document.getElementById('stockedOutExportBtn').addEventListener('click', exportStockedOutCsv);
   document.getElementById('stockedOutModalBackdrop').addEventListener('click', function(e){
     if (e.target === document.getElementById('stockedOutModalBackdrop')) closeStockedOutModal();
+  });
+  document.getElementById('stockedOutFamilyFilter').addEventListener('change', function(){
+    stockedOutFamilyFilter = this.value;
+    renderStockedOutModalBody();
   });
 
   /* ------------------------------ TODAY'S TABLE ------------------------------ */
@@ -2982,6 +2999,8 @@
     downloadCsv(csv, 'tiktok_vs_bird_gap.csv');
   }
   /* ------------------------------ TAB NAVIGATION ------------------------------- */
+  const TAB_PERSIST_KEY = 'stockMonitorLastTab_v1';
+  const VALID_TABS = ['today','focus','overview','inventory','dataQuality','history'];
   function switchTab(name){
     Array.from(document.querySelectorAll('.tab-btn')).forEach(function(btn){
       btn.classList.toggle('active', btn.getAttribute('data-tab')===name);
@@ -2989,10 +3008,20 @@
     Array.from(document.querySelectorAll('.tab-panel')).forEach(function(panel){
       panel.classList.toggle('active', panel.getAttribute('data-tab')===name);
     });
+    // Remember the tab across reloads -- fails silently in private browsing/quota-exceeded
+    // since this is a convenience, not critical state.
+    try { localStorage.setItem(TAB_PERSIST_KEY, name); } catch(e){}
   }
   Array.from(document.querySelectorAll('.tab-btn')).forEach(function(btn){
     btn.addEventListener('click', function(){ switchTab(btn.getAttribute('data-tab')); });
   });
+  // Restore whichever tab was last viewed -- if nothing was saved yet (first visit) or the
+  // saved value doesn't match a real tab (e.g. an older tab name from a prior version), the
+  // "today" tab already marked .active in the HTML stays as the default.
+  try {
+    const savedTab = localStorage.getItem(TAB_PERSIST_KEY);
+    if (savedTab && VALID_TABS.indexOf(savedTab)!==-1) switchTab(savedTab);
+  } catch(e){}
 
   document.getElementById('gapListBtn').addEventListener('click', openGapListModal);
   document.getElementById('gapListClose').addEventListener('click', closeGapListModal);
