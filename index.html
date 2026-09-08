@@ -434,7 +434,6 @@
         <button class="tab-btn" data-tab="history" type="button">🗂 History &amp; Notes</button>
       </div>
       <button class="btn btn-ghost btn-sm" id="gapListBtn" type="button">🔄 Compare Gap ≥ 10 <span class="count-pill" id="gapListCountPill">0</span></button>
-      <button class="btn btn-ghost btn-sm" id="emailAlertBtn" type="button">🔔 แจ้งเตือนทางอีเมล</button>
     </div>
 
     <div class="tab-panel active" data-tab="today">
@@ -954,6 +953,7 @@
           <p class="modal-sub" id="noffModalSub"></p>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-ghost btn-sm" id="noffEmailAlertBtn" type="button">🔔 ส่งอีเมล</button>
           <button class="btn btn-ghost btn-sm" id="noffExportBtn" type="button">⬇ Export CSV</button>
           <button class="modal-close" id="noffModalClose" type="button">✕</button>
         </div>
@@ -987,6 +987,7 @@
           <p class="modal-sub" id="stockedOutModalSub"></p>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-ghost btn-sm" id="stockedOutEmailAlertBtn" type="button">🔔 ส่งอีเมล</button>
           <button class="btn btn-ghost btn-sm" id="stockedOutExportBtn" type="button">⬇ Export CSV</button>
           <button class="modal-close" id="stockedOutModalClose" type="button">✕</button>
         </div>
@@ -2190,67 +2191,105 @@
     if (dataIssue>0) document.getElementById('dataIssueViewBtn').addEventListener('click', openDataIssueModal);
   }
 
-  /* ------------------------------ EMAIL ALERT (mailto draft) ------------------------------ */
-  // No backend on this static site, so this can't send/schedule anything by itself -- it just
-  // builds a mailto: link (subject+body pre-filled) and hands it to whatever mail client is
-  // the default on this machine (Outlook, if that's what's configured), so the user reviews
-  // and sends it themselves. If that default client IS Outlook, the compose window that opens
-  // is Outlook's own real "To" field -- typing a name there triggers Outlook's own org
-  // Directory autocomplete, which is entirely Outlook's feature, not something this page does.
+  /* ------------------------------ EMAIL ALERT (mailto draft + xlsx download) ------------------------------ */
+  // No backend on this static site, so this can't send/schedule anything by itself, and a
+  // mailto: link can NEVER carry a file attachment (a hard limitation of the mailto: standard
+  // itself, not something any website can work around -- otherwise any page could silently
+  // attach files to your outgoing mail). The closest honest approximation: download a real
+  // .xlsx (via the same XLSX.js already loaded for reading uploads), THEN open a mailto: draft
+  // whose body says which file to attach. If the default mail client happens to be Outlook,
+  // the compose window that opens is Outlook's own real "To" field -- typing a name there gets
+  // Outlook's own org-directory autocomplete for free, entirely Outlook's feature, not
+  // something this page implements.
+  //
+  // Two independent alert features, not one bundled email -- each triggered from inside its
+  // own existing modal (Allocate from NOFF / Stocked Out Everywhere) rather than one generic
+  // button, so the recipient/content is always scoped to whichever list the Leader was already
+  // looking at, and one can be sent without dragging the other along.
   const EMAIL_ALERT_RECIPIENTS_KEY = 'stockMonitorAlertRecipients_v1';
+  const EMAIL_ALERT_SCOPES = {
+    noff: {
+      title: 'ของเบิกด่วน — Allocate จาก NOFF',
+      emoji: '🚨',
+      sheetName: 'Allocate from NOFF',
+      getRows: function(){ return getNoffAllocationRows(); },
+      aoaHeader: ['Product Code','Product Name','SKU','TikTok Stock','Suggested','NONL (Online)','NOFF (Offline)','Average/Day','Last30days','Allocate from NOFF'],
+      aoaRow: function(r){
+        return [r.productCode||'', cleanProductName(r.productName,r.productCode)||'', displaySku(r), r.tiktokStock,
+          r.suggestedQty, r.birdNonl, r.birdNoff, r.usage!==null?Number(r.usage.toFixed(1)):null, r.historyQtyText||'', r.noffAllocation];
+      },
+      fileTag: 'allocate_from_noff',
+    },
+    stockedout: {
+      title: 'สินค้าหมดสต็อกทุกช่องทาง',
+      emoji: '⛔',
+      sheetName: 'Stocked Out Everywhere',
+      getRows: function(){ return getStockedOutRows(); },
+      aoaHeader: ['Product Code','Product Name','SKU','Priority','Restock ETA','ETA Countdown','Order Status'],
+      aoaRow: function(r){
+        return [r.productCode||'', cleanProductName(r.productName,r.productCode)||'', displaySku(r), r.priority,
+          restockEta.get(r.sku)||'', restockEtaStatus(r.sku).label, RESTOCK_STATUS_META[getRestockStatus(r.sku)].label];
+      },
+      fileTag: 'stocked_out_everywhere',
+    },
+  };
+  let emailAlertScope = 'noff';
+  function emailAlertFileName(){
+    const cfg = EMAIL_ALERT_SCOPES[emailAlertScope];
+    return 'inventory_' + cfg.fileTag + '_' + (snapshotDateOverride || fmtDate(new Date())) + '.xlsx';
+  }
+  function downloadEmailAlertWorkbook(){
+    const cfg = EMAIL_ALERT_SCOPES[emailAlertScope];
+    const aoa = [cfg.aoaHeader].concat(cfg.getRows().map(cfg.aoaRow));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), cfg.sheetName);
+    XLSX.writeFile(wb, emailAlertFileName());
+  }
   function buildEmailAlertBody(){
-    const p0 = rows.filter(function(r){ return r.priority==='P0'; }).length;
-    const dataIssue = computeDataIssueRows().length;
-    const stockedOut = getStockedOutRows().length;
-    const totalSalesAtRisk = rows.reduce(function(s,r){ return s + (r.salesAtRisk||0); }, 0);
+    const cfg = EMAIL_ALERT_SCOPES[emailAlertScope];
+    const count = cfg.getRows().length;
     const dateStr = snapshotDateOverride || fmtDate(new Date());
-    const topCritical = rows.filter(function(r){ return r.priority==='P0'; }).sort(function(a,b){
-      const ad = a.daysLeft===null ? Infinity : a.daysLeft, bd = b.daysLeft===null ? Infinity : b.daysLeft;
-      return ad - bd;
-    }).slice(0, 10);
-    let body = 'สรุปสถานะสต็อก TikTok x Bird — ข้อมูลวันที่ ' + dateStr + '\n\n';
-    body += '🔴 SKU ระดับ Critical (P0): ' + fmtInt(p0) + '\n';
-    body += '⚠️ SKU หาไม่เจอใน Bird เลย: ' + fmtInt(dataIssue) + '\n';
-    body += '⛔ สินค้าหมดสต็อกทุกช่องทาง: ' + fmtInt(stockedOut) + '\n';
-    body += '💸 โอกาสเสียยอดขายรวม: ' + fmtCurrency(totalSalesAtRisk) + '\n\n';
-    if (topCritical.length){
-      body += 'Top ' + fmtInt(topCritical.length) + ' SKU วิกฤตที่สุด (Days Left น้อยสุดก่อน):\n';
-      topCritical.forEach(function(r){
-        body += '- ' + (r.productCode||'—') + ' ' + (cleanProductName(r.productName, r.productCode)||'') +
-          ' (' + displaySku(r) + ') — เหลือ ' + (r.daysLeft!==null ? fmtNum1(r.daysLeft)+' วัน' : 'N/A') + '\n';
-      });
-      body += '\n';
-    }
+    let body = cfg.emoji + ' ' + cfg.title + ' — ข้อมูลวันที่ ' + dateStr + '\n\n';
+    body += 'จำนวน: ' + fmtInt(count) + ' SKU\n\n';
+    body += '📎 กรุณาแนบไฟล์ที่เพิ่งดาวน์โหลดมาด้วยตนเอง: ' + emailAlertFileName() + '\n';
+    body += '(รายละเอียดครบทุกคอลัมน์เหมือนในหน้าเว็บ)\n\n';
     body += 'ดูรายละเอียดทั้งหมดที่ https://mkt-stack.github.io/Inventory-system/';
     return body;
   }
   function renderEmailAlertPreview(){
     document.getElementById('emailAlertPreview').textContent = buildEmailAlertBody();
   }
-  function openEmailAlertModal(){
+  function openEmailAlertModal(scope){
+    emailAlertScope = scope;
     let savedTo = '';
-    try { savedTo = localStorage.getItem(EMAIL_ALERT_RECIPIENTS_KEY) || ''; } catch(e){}
+    try { savedTo = localStorage.getItem(EMAIL_ALERT_RECIPIENTS_KEY + '_' + scope) || ''; } catch(e){}
     document.getElementById('emailAlertTo').value = savedTo;
     renderEmailAlertPreview();
     document.getElementById('emailAlertModalBackdrop').classList.add('open');
   }
   function closeEmailAlertModal(){ document.getElementById('emailAlertModalBackdrop').classList.remove('open'); }
-  document.getElementById('emailAlertBtn').addEventListener('click', openEmailAlertModal);
+  document.getElementById('noffEmailAlertBtn').addEventListener('click', function(){ openEmailAlertModal('noff'); });
+  document.getElementById('stockedOutEmailAlertBtn').addEventListener('click', function(){ openEmailAlertModal('stockedout'); });
   document.getElementById('emailAlertModalClose').addEventListener('click', closeEmailAlertModal);
   document.getElementById('emailAlertModalBackdrop').addEventListener('click', function(e){
     if (e.target === document.getElementById('emailAlertModalBackdrop')) closeEmailAlertModal();
   });
   document.getElementById('emailAlertOpenBtn').addEventListener('click', function(){
     const to = document.getElementById('emailAlertTo').value.trim();
-    try { localStorage.setItem(EMAIL_ALERT_RECIPIENTS_KEY, to); } catch(e){}
+    try { localStorage.setItem(EMAIL_ALERT_RECIPIENTS_KEY + '_' + emailAlertScope, to); } catch(e){}
+    downloadEmailAlertWorkbook();
     const dateStr = snapshotDateOverride || fmtDate(new Date());
-    const subject = 'สรุปสถานะสต็อก TikTok x Bird — ' + dateStr;
+    const subject = EMAIL_ALERT_SCOPES[emailAlertScope].title + ' — ' + dateStr;
     const mailto = 'mailto:' + to + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(buildEmailAlertBody());
-    const a = document.createElement('a');
-    a.href = mailto;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // Give the file-save dialog/download a moment to actually start before the mail client
+    // steals focus -- both happening in the exact same tick is unreliable in some browsers.
+    setTimeout(function(){
+      const a = document.createElement('a');
+      a.href = mailto;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }, 400);
   });
 
   /* ------------------------------ DATA ISSUE MODAL ------------------------------ */
