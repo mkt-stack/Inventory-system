@@ -87,9 +87,9 @@
   .brand { display:flex; align-items:center; gap:10px; }
   .brand .logo {
     width: 38px; height: 38px; border-radius: 9px;
-    background: linear-gradient(135deg, var(--series-1), var(--series-3));
+    background: #000;
     display:flex; align-items:center; justify-content:center;
-    color:#fff; font-weight:700; font-size:12px; letter-spacing:-1px; flex-shrink:0; overflow:hidden;
+    flex-shrink:0; overflow:hidden;
   }
   .brand h1 { font-size: 16px; margin:0; font-weight:700; letter-spacing:.1px; }
   .brand p { margin:0; font-size:12px; color:var(--text-secondary); }
@@ -127,6 +127,10 @@
   .config-field input[type=number] {
     width: 88px; background: var(--page-plane); border: 1px solid var(--border); color: var(--text-primary);
     border-radius: 8px; padding: 7px 10px; font-size: 13px; font-family: inherit;
+  }
+  .config-field input[type=text] {
+    background: var(--page-plane); border: 1px solid var(--border); color: var(--text-primary);
+    border-radius: 8px; padding: 7px 10px; font-size: 13px; font-family: inherit; box-sizing: border-box;
   }
   .config-spacer { flex:1; }
 
@@ -396,7 +400,13 @@
 
   <div class="topbar">
     <div class="brand">
-      <div class="logo" title="TikTok × Bird Warehouse">🎵×📦</div>
+      <div class="logo" title="TikTok">
+        <svg viewBox="0 0 24 24" width="23" height="23" xmlns="http://www.w3.org/2000/svg">
+          <path fill="#25F4EE" transform="translate(-1,0.7)" d="M16.6 5.82s.51.5 0 0A4.278 4.278 0 0 1 15.54 3h-3.09v12.4a2.592 2.592 0 0 1-2.59 2.5c-1.42 0-2.6-1.16-2.6-2.6 0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22-6.47 5.64 0 3.33 2.76 5.7 5.69 5.7 3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0 4.3 1.38V7.3s-1.88.09-3.24-1.48z"/>
+          <path fill="#FE2C55" transform="translate(1,-0.7)" d="M16.6 5.82s.51.5 0 0A4.278 4.278 0 0 1 15.54 3h-3.09v12.4a2.592 2.592 0 0 1-2.59 2.5c-1.42 0-2.6-1.16-2.6-2.6 0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22-6.47 5.64 0 3.33 2.76 5.7 5.69 5.7 3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0 4.3 1.38V7.3s-1.88.09-3.24-1.48z"/>
+          <path fill="#fff" d="M16.6 5.82s.51.5 0 0A4.278 4.278 0 0 1 15.54 3h-3.09v12.4a2.592 2.592 0 0 1-2.59 2.5c-1.42 0-2.6-1.16-2.6-2.6 0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22-6.47 5.64 0 3.33 2.76 5.7 5.69 5.7 3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0 4.3 1.38V7.3s-1.88.09-3.24-1.48z"/>
+        </svg>
+      </div>
       <div>
         <h1>Stock Monitoring System</h1>
         <p>ดู Stock ฝั่ง TikTok และตัดสินใจว่าวันนี้ควรเบิกอะไรจาก Bird Warehouse เท่าไหร่</p>
@@ -424,6 +434,7 @@
         <button class="tab-btn" data-tab="history" type="button">🗂 History &amp; Notes</button>
       </div>
       <button class="btn btn-ghost btn-sm" id="gapListBtn" type="button">🔄 Compare Gap ≥ 10 <span class="count-pill" id="gapListCountPill">0</span></button>
+      <button class="btn btn-ghost btn-sm" id="emailAlertBtn" type="button">🔔 แจ้งเตือนทางอีเมล</button>
     </div>
 
     <div class="tab-panel active" data-tab="today">
@@ -872,6 +883,30 @@
           </thead>
           <tbody id="dataIssueModalTbody"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="emailAlertModalBackdrop">
+    <div class="modal-panel" style="max-width:640px;">
+      <div class="modal-head">
+        <div>
+          <p class="modal-title">🔔 แจ้งเตือนทางอีเมล</p>
+          <p class="modal-sub">สรุปสถานะวันนี้ พร้อมเปิดร่างอีเมลในโปรแกรมอีเมลหลักของเครื่องคุณ (เช่น Outlook) ให้ตรวจสอบก่อนกดส่งเอง</p>
+        </div>
+        <button class="modal-close" id="emailAlertModalClose" type="button">✕</button>
+      </div>
+      <div class="config-field" style="margin-bottom:12px;">
+        <label for="emailAlertTo">ส่งถึง (พิมพ์อีเมล คั่นด้วย , ได้หลายคน)</label>
+        <input type="text" id="emailAlertTo" placeholder="name@company.com, name2@company.com" style="width:100%;">
+        <p class="section-desc" style="margin:6px 0 0;">เว็บนี้เป็น static site ไม่มีเซิร์ฟเวอร์เบื้องหลัง จึงไม่มีสมุดรายชื่อ/ค้นหาชื่อเล่นในองค์กรให้ในตัว — ต้องพิมพ์อีเมลเต็มที่นี่ แต่ถ้าเครื่องคุณตั้ง Outlook เป็นโปรแกรมอีเมลหลักอยู่แล้ว หน้าต่างร่างที่เปิดขึ้นจะเป็น Outlook จริง พิมพ์ชื่อเพิ่มในช่อง "ถึง" ตอนนั้นได้ แล้ว Outlook จะค้นหา/เดาให้จาก Directory ขององค์กรคุณเองอัตโนมัติ (เป็นฟีเจอร์ของ Outlook เอง)</p>
+      </div>
+      <div class="table-scroll" style="max-height:260px; overflow-y:auto; border:1px solid var(--gridline); border-radius:8px; padding:10px;">
+        <pre id="emailAlertPreview" style="white-space:pre-wrap; font-family:inherit; font-size:12.5px; margin:0;"></pre>
+      </div>
+      <div class="config-row" style="border-top:none; padding-top:14px;">
+        <div class="config-spacer"></div>
+        <button class="btn btn-primary" id="emailAlertOpenBtn" type="button">📧 เปิดร่างในโปรแกรมอีเมล</button>
       </div>
     </div>
   </div>
@@ -2154,6 +2189,69 @@
       '</div>';
     if (dataIssue>0) document.getElementById('dataIssueViewBtn').addEventListener('click', openDataIssueModal);
   }
+
+  /* ------------------------------ EMAIL ALERT (mailto draft) ------------------------------ */
+  // No backend on this static site, so this can't send/schedule anything by itself -- it just
+  // builds a mailto: link (subject+body pre-filled) and hands it to whatever mail client is
+  // the default on this machine (Outlook, if that's what's configured), so the user reviews
+  // and sends it themselves. If that default client IS Outlook, the compose window that opens
+  // is Outlook's own real "To" field -- typing a name there triggers Outlook's own org
+  // Directory autocomplete, which is entirely Outlook's feature, not something this page does.
+  const EMAIL_ALERT_RECIPIENTS_KEY = 'stockMonitorAlertRecipients_v1';
+  function buildEmailAlertBody(){
+    const p0 = rows.filter(function(r){ return r.priority==='P0'; }).length;
+    const dataIssue = computeDataIssueRows().length;
+    const stockedOut = getStockedOutRows().length;
+    const totalSalesAtRisk = rows.reduce(function(s,r){ return s + (r.salesAtRisk||0); }, 0);
+    const dateStr = snapshotDateOverride || fmtDate(new Date());
+    const topCritical = rows.filter(function(r){ return r.priority==='P0'; }).sort(function(a,b){
+      const ad = a.daysLeft===null ? Infinity : a.daysLeft, bd = b.daysLeft===null ? Infinity : b.daysLeft;
+      return ad - bd;
+    }).slice(0, 10);
+    let body = 'สรุปสถานะสต็อก TikTok x Bird — ข้อมูลวันที่ ' + dateStr + '\n\n';
+    body += '🔴 SKU ระดับ Critical (P0): ' + fmtInt(p0) + '\n';
+    body += '⚠️ SKU หาไม่เจอใน Bird เลย: ' + fmtInt(dataIssue) + '\n';
+    body += '⛔ สินค้าหมดสต็อกทุกช่องทาง: ' + fmtInt(stockedOut) + '\n';
+    body += '💸 โอกาสเสียยอดขายรวม: ' + fmtCurrency(totalSalesAtRisk) + '\n\n';
+    if (topCritical.length){
+      body += 'Top ' + fmtInt(topCritical.length) + ' SKU วิกฤตที่สุด (Days Left น้อยสุดก่อน):\n';
+      topCritical.forEach(function(r){
+        body += '- ' + (r.productCode||'—') + ' ' + (cleanProductName(r.productName, r.productCode)||'') +
+          ' (' + displaySku(r) + ') — เหลือ ' + (r.daysLeft!==null ? fmtNum1(r.daysLeft)+' วัน' : 'N/A') + '\n';
+      });
+      body += '\n';
+    }
+    body += 'ดูรายละเอียดทั้งหมดที่ https://mkt-stack.github.io/Inventory-system/';
+    return body;
+  }
+  function renderEmailAlertPreview(){
+    document.getElementById('emailAlertPreview').textContent = buildEmailAlertBody();
+  }
+  function openEmailAlertModal(){
+    let savedTo = '';
+    try { savedTo = localStorage.getItem(EMAIL_ALERT_RECIPIENTS_KEY) || ''; } catch(e){}
+    document.getElementById('emailAlertTo').value = savedTo;
+    renderEmailAlertPreview();
+    document.getElementById('emailAlertModalBackdrop').classList.add('open');
+  }
+  function closeEmailAlertModal(){ document.getElementById('emailAlertModalBackdrop').classList.remove('open'); }
+  document.getElementById('emailAlertBtn').addEventListener('click', openEmailAlertModal);
+  document.getElementById('emailAlertModalClose').addEventListener('click', closeEmailAlertModal);
+  document.getElementById('emailAlertModalBackdrop').addEventListener('click', function(e){
+    if (e.target === document.getElementById('emailAlertModalBackdrop')) closeEmailAlertModal();
+  });
+  document.getElementById('emailAlertOpenBtn').addEventListener('click', function(){
+    const to = document.getElementById('emailAlertTo').value.trim();
+    try { localStorage.setItem(EMAIL_ALERT_RECIPIENTS_KEY, to); } catch(e){}
+    const dateStr = snapshotDateOverride || fmtDate(new Date());
+    const subject = 'สรุปสถานะสต็อก TikTok x Bird — ' + dateStr;
+    const mailto = 'mailto:' + to + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(buildEmailAlertBody());
+    const a = document.createElement('a');
+    a.href = mailto;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
 
   /* ------------------------------ DATA ISSUE MODAL ------------------------------ */
   function computeDataIssueRows(){
