@@ -891,18 +891,33 @@
       <div class="modal-head">
         <div>
           <p class="modal-title">🔔 แจ้งเตือนทางอีเมล</p>
-          <p class="modal-sub">สรุปสถานะวันนี้ พร้อมเปิดร่างอีเมลในโปรแกรมอีเมลหลักของเครื่องคุณ (เช่น Outlook) ให้ตรวจสอบก่อนกดส่งเอง</p>
+          <p class="modal-sub" id="emailAlertModalSub">สรุปสถานะวันนี้ พร้อมเปิดร่างอีเมลในโปรแกรมอีเมลหลักของเครื่องคุณ (เช่น Outlook) ให้ตรวจสอบก่อนกดส่งเอง</p>
         </div>
         <button class="modal-close" id="emailAlertModalClose" type="button">✕</button>
       </div>
       <div class="config-field" style="margin-bottom:12px;">
         <label for="emailAlertTo">ส่งถึง (พิมพ์อีเมล คั่นด้วย , ได้หลายคน)</label>
         <input type="text" id="emailAlertTo" placeholder="name@company.com, name2@company.com" style="width:100%;">
-        <p class="section-desc" style="margin:6px 0 0;">เว็บนี้เป็น static site ไม่มีเซิร์ฟเวอร์เบื้องหลัง จึงไม่มีสมุดรายชื่อ/ค้นหาชื่อเล่นในองค์กรให้ในตัว — ต้องพิมพ์อีเมลเต็มที่นี่ แต่ถ้าเครื่องคุณตั้ง Outlook เป็นโปรแกรมอีเมลหลักอยู่แล้ว หน้าต่างร่างที่เปิดขึ้นจะเป็น Outlook จริง พิมพ์ชื่อเพิ่มในช่อง "ถึง" ตอนนั้นได้ แล้ว Outlook จะค้นหา/เดาให้จาก Directory ขององค์กรคุณเองอัตโนมัติ (เป็นฟีเจอร์ของ Outlook เอง)</p>
+        <p class="section-desc" style="margin:6px 0 0;" id="emailAlertToHint">เว็บนี้เป็น static site ไม่มีเซิร์ฟเวอร์เบื้องหลัง จึงไม่มีสมุดรายชื่อ/ค้นหาชื่อเล่นในองค์กรให้ในตัว — ต้องพิมพ์อีเมลเต็มที่นี่ แต่ถ้าเครื่องคุณตั้ง Outlook เป็นโปรแกรมอีเมลหลักอยู่แล้ว หน้าต่างร่างที่เปิดขึ้นจะเป็น Outlook จริง พิมพ์ชื่อเพิ่มในช่อง "ถึง" ตอนนั้นได้ แล้ว Outlook จะค้นหา/เดาให้จาก Directory ขององค์กรคุณเองอัตโนมัติ (เป็นฟีเจอร์ของ Outlook เอง)</p>
       </div>
-      <div class="table-scroll" style="max-height:260px; overflow-y:auto; border:1px solid var(--gridline); border-radius:8px; padding:10px;">
+      <div class="table-scroll" style="max-height:220px; overflow-y:auto; border:1px solid var(--gridline); border-radius:8px; padding:10px;">
         <pre id="emailAlertPreview" style="white-space:pre-wrap; font-family:inherit; font-size:12.5px; margin:0;"></pre>
       </div>
+
+      <details style="margin-top:12px;">
+        <summary style="cursor:pointer; font-size:12px; color:var(--text-secondary); font-weight:600;">⚙️ ตั้งค่าส่งอัตโนมัติแบบแนบไฟล์ให้จริง (ผ่าน Power Automate)</summary>
+        <p class="section-desc" style="margin:8px 0;">ถ้าอยากให้กดปุ่มเดียวแล้วอีเมลถูกส่งออกจริงพร้อมไฟล์แนบ (ไม่ต้องแนบเอง) ต้องสร้าง Power Automate Flow ในองค์กรคุณเอง 1 ครั้ง (ใช้ Microsoft 365 ที่มีอยู่แล้ว ไม่มีค่าใช้จ่ายเพิ่ม) แล้ววาง URL ที่ได้ไว้ที่นี่ — ดูขั้นตอนสร้าง Flow ทั้งหมดจาก Claude ในแชท</p>
+        <div class="config-field">
+          <label for="powerAutomateUrlInput">Power Automate HTTP Webhook URL</label>
+          <input type="text" id="powerAutomateUrlInput" placeholder="https://prod-XX.eastus.logic.azure.com/workflows/..." style="width:100%;">
+        </div>
+        <div class="config-row" style="border-top:none; padding-top:10px;">
+          <div class="config-spacer"></div>
+          <button class="btn btn-ghost btn-sm" id="powerAutomateUrlClearBtn" type="button">ล้างค่า (กลับไปโหมดเปิดร่างเอง)</button>
+          <button class="btn btn-ghost btn-sm" id="powerAutomateUrlSaveBtn" type="button">บันทึก</button>
+        </div>
+      </details>
+
       <div class="config-row" style="border-top:none; padding-top:14px;">
         <div class="config-spacer"></div>
         <button class="btn btn-primary" id="emailAlertOpenBtn" type="button">📧 เปิดร่างในโปรแกรมอีเมล</button>
@@ -2207,6 +2222,10 @@
   // button, so the recipient/content is always scoped to whichever list the Leader was already
   // looking at, and one can be sent without dragging the other along.
   const EMAIL_ALERT_RECIPIENTS_KEY = 'stockMonitorAlertRecipients_v1';
+  const POWER_AUTOMATE_URL_KEY = 'stockMonitorPowerAutomateUrl_v1';
+  function getPowerAutomateUrl(){
+    try { return (localStorage.getItem(POWER_AUTOMATE_URL_KEY) || '').trim(); } catch(e){ return ''; }
+  }
   const EMAIL_ALERT_SCOPES = {
     noff: {
       title: 'ของเบิกด่วน — Allocate จาก NOFF',
@@ -2245,18 +2264,29 @@
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), cfg.sheetName);
     XLSX.writeFile(wb, emailAlertFileName());
   }
+  function buildEmailAlertWorkbookBase64(){
+    const cfg = EMAIL_ALERT_SCOPES[emailAlertScope];
+    const aoa = [cfg.aoaHeader].concat(cfg.getRows().map(cfg.aoaRow));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), cfg.sheetName);
+    return XLSX.write(wb, {type:'base64', bookType:'xlsx'});
+  }
   // Formal Thai business-letter phrasing, ready to send as-is rather than a terse bullet
-  // summary -- greeting, purpose, the file-attach reminder, a link for more detail, and a
-  // closing, matching the tone of an actual internal notice rather than a system log dump.
+  // summary -- greeting, purpose, the file-attach reminder (only when there's no Power Automate
+  // flow attaching it for real), a link for more detail, and a closing, matching the tone of an
+  // actual internal notice rather than a system log dump.
   function buildEmailAlertBody(){
     const cfg = EMAIL_ALERT_SCOPES[emailAlertScope];
     const count = cfg.getRows().length;
     const dateStr = snapshotDateOverride || fmtDate(new Date());
+    const auto = !!getPowerAutomateUrl();
     let body = 'เรียน ทีมงานที่เกี่ยวข้อง\n\n';
     body += 'ระบบ Stock Monitoring System ตรวจพบรายการ "' + cfg.title + '" จำนวน ' + fmtInt(count) +
       ' SKU ประจำวันที่ ' + dateStr + ' จึงเรียนมาเพื่อโปรดพิจารณาดำเนินการตามความเหมาะสม\n\n';
-    body += 'รายละเอียดครบทุกคอลัมน์อยู่ในไฟล์แนบ "' + emailAlertFileName() + '" ที่ได้ดาวน์โหลดไว้ให้แล้ว ' +
-      'กรุณาแนบไฟล์ดังกล่าวก่อนกดส่งอีเมลฉบับนี้\n\n';
+    body += auto
+      ? ('รายละเอียดครบทุกคอลัมน์อยู่ในไฟล์แนบ "' + emailAlertFileName() + '"\n\n')
+      : ('รายละเอียดครบทุกคอลัมน์อยู่ในไฟล์แนบ "' + emailAlertFileName() + '" ที่ได้ดาวน์โหลดไว้ให้แล้ว ' +
+         'กรุณาแนบไฟล์ดังกล่าวก่อนกดส่งอีเมลฉบับนี้\n\n');
     body += 'ท่านสามารถตรวจสอบข้อมูลล่าสุดแบบเรียลไทม์เพิ่มเติมได้ที่ https://mkt-stack.github.io/Inventory-system/\n\n';
     body += 'ขอแสดงความนับถือ\nStock Monitoring System';
     return body;
@@ -2264,15 +2294,29 @@
   function renderEmailAlertPreview(){
     document.getElementById('emailAlertPreview').textContent = buildEmailAlertBody();
   }
+  // Swaps the modal's copy/button between the two modes: plain mailto draft (needs a manual
+  // attach) vs. real send-with-attachment through the Leader's own Power Automate flow.
+  function updateEmailAlertModeUI(){
+    const auto = !!getPowerAutomateUrl();
+    document.getElementById('emailAlertOpenBtn').textContent = auto
+      ? '⚡ ส่งอีเมลอัตโนมัติ (แนบไฟล์ให้)'
+      : '📧 เปิดร่างในโปรแกรมอีเมล';
+    document.getElementById('emailAlertModalSub').textContent = auto
+      ? 'สรุปสถานะวันนี้ พร้อมไฟล์แนบ — กดส่งแล้วอีเมลจะถูกส่งออกจริงทันทีผ่าน Power Automate ที่ตั้งค่าไว้'
+      : 'สรุปสถานะวันนี้ พร้อมเปิดร่างอีเมลในโปรแกรมอีเมลหลักของเครื่องคุณ (เช่น Outlook) ให้ตรวจสอบก่อนกดส่งเอง';
+  }
   function openEmailAlertModal(scope){
     emailAlertScope = scope;
     let savedTo = '';
     try { savedTo = localStorage.getItem(EMAIL_ALERT_RECIPIENTS_KEY + '_' + scope) || ''; } catch(e){}
     document.getElementById('emailAlertTo').value = savedTo;
-    // Download the attachment right away, as soon as this modal opens -- by the time the
+    document.getElementById('powerAutomateUrlInput').value = getPowerAutomateUrl();
+    updateEmailAlertModeUI();
+    // Only auto-download the attachment for the manual mailto workflow -- by the time the
     // Leader is reading the preview and about to click send, the file is already sitting in
-    // Downloads ready to attach, instead of only starting when they click the final button.
-    downloadEmailAlertWorkbook();
+    // Downloads ready to attach. Once a Power Automate flow is configured the file is attached
+    // server-side instead, so a surprise download here would just be confusing.
+    if (!getPowerAutomateUrl()) downloadEmailAlertWorkbook();
     renderEmailAlertPreview();
     document.getElementById('emailAlertModalBackdrop').classList.add('open');
   }
@@ -2283,20 +2327,61 @@
   document.getElementById('emailAlertModalBackdrop').addEventListener('click', function(e){
     if (e.target === document.getElementById('emailAlertModalBackdrop')) closeEmailAlertModal();
   });
+  document.getElementById('powerAutomateUrlSaveBtn').addEventListener('click', function(){
+    const val = document.getElementById('powerAutomateUrlInput').value.trim();
+    try { localStorage.setItem(POWER_AUTOMATE_URL_KEY, val); } catch(e){}
+    updateEmailAlertModeUI();
+    renderEmailAlertPreview();
+  });
+  document.getElementById('powerAutomateUrlClearBtn').addEventListener('click', function(){
+    document.getElementById('powerAutomateUrlInput').value = '';
+    try { localStorage.removeItem(POWER_AUTOMATE_URL_KEY); } catch(e){}
+    updateEmailAlertModeUI();
+    renderEmailAlertPreview();
+  });
+  // Power Automate's HTTP-trigger endpoint doesn't return CORS headers for a cross-origin
+  // fetch from a GitHub Pages page, so this has to fire with mode:'no-cors' -- the request
+  // still reaches and triggers the Flow, we just can't read its (opaque) response back here to
+  // confirm success client-side. A thrown error here means the request never left the browser
+  // (bad URL / no network), not that the Flow itself failed.
+  function sendEmailAlertViaPowerAutomate(webhookUrl, to, subject, body){
+    const payload = {
+      to: to,
+      subject: subject,
+      body: body,
+      fileName: emailAlertFileName(),
+      fileContentBase64: buildEmailAlertWorkbookBase64(),
+    };
+    fetch(webhookUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(function(err){
+      console.error('Power Automate send failed', err);
+      alert('ส่งอีเมลอัตโนมัติไม่สำเร็จ (เครือข่ายมีปัญหาหรือ Webhook URL ไม่ถูกต้อง) กรุณาตรวจสอบการตั้งค่า Power Automate');
+    });
+  }
   document.getElementById('emailAlertOpenBtn').addEventListener('click', function(){
     const to = document.getElementById('emailAlertTo').value.trim();
     try { localStorage.setItem(EMAIL_ALERT_RECIPIENTS_KEY + '_' + emailAlertScope, to); } catch(e){}
     const dateStr = snapshotDateOverride || fmtDate(new Date());
     const subject = EMAIL_ALERT_SCOPES[emailAlertScope].title + ' — ' + dateStr;
-    const mailto = 'mailto:' + to + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(buildEmailAlertBody());
-    // The file already downloaded when this modal opened -- just hand off to the mail client.
-    (function(){
-      const a = document.createElement('a');
-      a.href = mailto;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    })();
+    const webhookUrl = getPowerAutomateUrl();
+    if (webhookUrl){
+      sendEmailAlertViaPowerAutomate(webhookUrl, to, subject, buildEmailAlertBody());
+    } else {
+      const mailto = 'mailto:' + to + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(buildEmailAlertBody());
+      // The file already downloaded when this modal opened -- just hand off to the mail client.
+      (function(){
+        const a = document.createElement('a');
+        a.href = mailto;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      })();
+    }
+    closeEmailAlertModal();
   });
 
   /* ------------------------------ DATA ISSUE MODAL ------------------------------ */
