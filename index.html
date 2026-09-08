@@ -1330,9 +1330,19 @@
     pm.forEach(function(p){ if (p.family) set.add(p.family); });
     return Array.from(set);
   }
+  // Product lines that aren't a real "Brand Family" value in Bird at all (Bird just never
+  // assigns them one) but still deserve their own group instead of piling into UNMAPPED --
+  // checked before the Bird-derived vocab since they're a deliberate, specific addition, not
+  // an inferred guess. Only ever reached when Bird gave no family (see buildBaseRow), so this
+  // never overrides a SKU Bird already classified as e.g. HERO/TEEN/BEAR/CLASSIC even when
+  // the product name also happens to mention one of these lines.
+  const EXTRA_FAMILY_KEYWORDS = ['Cool Tech', 'Performance', 'Perfect'];
   function suggestFamilyFromName(name, vocab){
     if (!name) return null;
     const n = normalizeName(name);
+    for (const kw of EXTRA_FAMILY_KEYWORDS){
+      if (n.indexOf(normalizeName(kw)) !== -1) return kw;
+    }
     for (const fam of vocab){
       if (!fam) continue;
       if (n.indexOf(normalizeName(fam)) !== -1) return fam;
