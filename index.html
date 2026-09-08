@@ -2245,15 +2245,20 @@
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), cfg.sheetName);
     XLSX.writeFile(wb, emailAlertFileName());
   }
+  // Formal Thai business-letter phrasing, ready to send as-is rather than a terse bullet
+  // summary -- greeting, purpose, the file-attach reminder, a link for more detail, and a
+  // closing, matching the tone of an actual internal notice rather than a system log dump.
   function buildEmailAlertBody(){
     const cfg = EMAIL_ALERT_SCOPES[emailAlertScope];
     const count = cfg.getRows().length;
     const dateStr = snapshotDateOverride || fmtDate(new Date());
-    let body = cfg.emoji + ' ' + cfg.title + ' — ข้อมูลวันที่ ' + dateStr + '\n\n';
-    body += 'จำนวน: ' + fmtInt(count) + ' SKU\n\n';
-    body += '📎 กรุณาแนบไฟล์ที่เพิ่งดาวน์โหลดมาด้วยตนเอง: ' + emailAlertFileName() + '\n';
-    body += '(รายละเอียดครบทุกคอลัมน์เหมือนในหน้าเว็บ)\n\n';
-    body += 'ดูรายละเอียดทั้งหมดที่ https://mkt-stack.github.io/Inventory-system/';
+    let body = 'เรียน ทีมงานที่เกี่ยวข้อง\n\n';
+    body += 'ระบบ Stock Monitoring System ตรวจพบรายการ "' + cfg.title + '" จำนวน ' + fmtInt(count) +
+      ' SKU ประจำวันที่ ' + dateStr + ' จึงเรียนมาเพื่อโปรดพิจารณาดำเนินการตามความเหมาะสม\n\n';
+    body += 'รายละเอียดครบทุกคอลัมน์อยู่ในไฟล์แนบ "' + emailAlertFileName() + '" ที่ได้ดาวน์โหลดไว้ให้แล้ว ' +
+      'กรุณาแนบไฟล์ดังกล่าวก่อนกดส่งอีเมลฉบับนี้\n\n';
+    body += 'ท่านสามารถตรวจสอบข้อมูลล่าสุดแบบเรียลไทม์เพิ่มเติมได้ที่ https://mkt-stack.github.io/Inventory-system/\n\n';
+    body += 'ขอแสดงความนับถือ\nStock Monitoring System';
     return body;
   }
   function renderEmailAlertPreview(){
@@ -2264,6 +2269,10 @@
     let savedTo = '';
     try { savedTo = localStorage.getItem(EMAIL_ALERT_RECIPIENTS_KEY + '_' + scope) || ''; } catch(e){}
     document.getElementById('emailAlertTo').value = savedTo;
+    // Download the attachment right away, as soon as this modal opens -- by the time the
+    // Leader is reading the preview and about to click send, the file is already sitting in
+    // Downloads ready to attach, instead of only starting when they click the final button.
+    downloadEmailAlertWorkbook();
     renderEmailAlertPreview();
     document.getElementById('emailAlertModalBackdrop').classList.add('open');
   }
@@ -2277,19 +2286,17 @@
   document.getElementById('emailAlertOpenBtn').addEventListener('click', function(){
     const to = document.getElementById('emailAlertTo').value.trim();
     try { localStorage.setItem(EMAIL_ALERT_RECIPIENTS_KEY + '_' + emailAlertScope, to); } catch(e){}
-    downloadEmailAlertWorkbook();
     const dateStr = snapshotDateOverride || fmtDate(new Date());
     const subject = EMAIL_ALERT_SCOPES[emailAlertScope].title + ' — ' + dateStr;
     const mailto = 'mailto:' + to + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(buildEmailAlertBody());
-    // Give the file-save dialog/download a moment to actually start before the mail client
-    // steals focus -- both happening in the exact same tick is unreliable in some browsers.
-    setTimeout(function(){
+    // The file already downloaded when this modal opened -- just hand off to the mail client.
+    (function(){
       const a = document.createElement('a');
       a.href = mailto;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-    }, 400);
+    })();
   });
 
   /* ------------------------------ DATA ISSUE MODAL ------------------------------ */
