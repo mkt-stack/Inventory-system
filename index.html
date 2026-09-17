@@ -1790,6 +1790,18 @@
   }
 
   /* ------------------------------ SNAPSHOT --------------------------------- */
+  // Nothing ever reads further back than CONFIG.rollingWindowSnapshots days (Average/Day,
+  // trend and Last30days all window to that), so anything older than that is dead weight that
+  // used to grow forever in localStorage (via persistState) with no cap -- every extra day of
+  // real usage silently added ~1 entry per SKU, forever, until the per-origin storage quota was
+  // exceeded and persistState()'s save started failing (silently, since it only logged to the
+  // console) -- the browser would then keep showing whatever the last SUCCESSFUL save was,
+  // making newer days look like they "disappeared" on reload. Trimming here keeps the stored
+  // history's size roughly constant instead of unbounded.
+  function trimSnapshotHistory(arr){
+    const cap = CONFIG.rollingWindowSnapshots + 1;
+    if (arr.length > cap) arr.splice(0, arr.length - cap);
+  }
   function recordSnapshot(baseRowsIn, dateStr){
     // Skip writing history for a Seller SKU that appears more than once in THIS batch --
     // snapshotStore is keyed by that code, so it can't tell the two physical rows apart, and
@@ -1806,6 +1818,7 @@
       if (idx!==-1) arr[idx] = { date: dateStr, stock: r.tiktokStock };
       else arr.push({ date: dateStr, stock: r.tiktokStock });
       arr.sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); });
+      trimSnapshotHistory(arr);
     });
     const totalStock = baseRowsIn.reduce((s,r)=> s + r.tiktokStock, 0);
     const logIdx = snapshotRunLog.findIndex(e=>e.date===dateStr);
@@ -1825,6 +1838,7 @@
         if (!arr.find(x=>x.date===e.date)){ arr.push({date:e.date, stock:e.stock}); addedDates++; }
       });
       arr.sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); });
+      trimSnapshotHistory(arr);
     });
     // rebuild the run log summary from the merged store
     const byDate = new Map();
@@ -3883,9 +3897,11 @@
       localStorage.setItem(PERSIST_KEY, JSON.stringify(payload));
     } catch(e){
       // Quota exceeded or localStorage unavailable (private browsing, etc.) — the analysis
-      // itself already succeeded, so this failing silently just means the next reload won't
-      // auto-restore; not worth interrupting the user's actual success message for.
+      // itself already succeeded, but silently swallowing this used to mean today's work would
+      // quietly vanish on the next reload with zero warning until someone noticed days later.
+      // Surface it loudly instead, since it changes what the very next reload will show.
       console.error('persistState failed', e);
+      setStatus('⚠️ บันทึกข้อมูลลงเบราว์เซอร์นี้ไม่สำเร็จ (พื้นที่จัดเก็บเต็มหรือใช้งานไม่ได้) — ข้อมูลที่เพิ่งวิเคราะห์จะหายไปถ้ารีโหลดหน้านี้ตอนนี้ กรุณาอัปโหลดไฟล์ใหม่อีกครั้งหลังรีโหลด หรือแจ้งผู้ดูแลถ้าเกิดซ้ำ', 'err');
     }
   }
   function tryRestorePersistedState(){
